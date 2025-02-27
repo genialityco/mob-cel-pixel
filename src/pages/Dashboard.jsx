@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useContext } from 'react';
 import {
   Container,
   Title,
@@ -27,32 +27,29 @@ import {
   limit,
 } from 'firebase/firestore';
 import { auth, db } from '../firebase/firebaseConfig';
+import { UserContext } from '../context/UserContext';
 
 const Dashboard = () => {
-  const currentUser = auth.currentUser;
+  const { currentUser, userLoading, updateUser } = useContext(UserContext);
   const uid = currentUser.uid;
 
   // Estados para la información del usuario, asistentes y reuniones.
-  const [profileData, setProfileData] = useState(null);
   const [assistants, setAssistants] = useState([]);
   const [acceptedMeetings, setAcceptedMeetings] = useState([]);
   const [pendingRequests, setPendingRequests] = useState([]);
 
   // Estados para el modal de edición del perfil
   const [editModalOpened, setEditModalOpened] = useState(false);
+  const [profileData, setProfileData] = useState({});
   const [editProfileData, setEditProfileData] = useState({});
 
   // Cargar perfil del usuario
   useEffect(() => {
-    const docRef = doc(db, 'users', uid);
-    const unsubscribe = onSnapshot(docRef, (docSnap) => {
-      if (docSnap.exists()) {
-        setProfileData(docSnap.data());
-        setEditProfileData(docSnap.data());
-      }
-    });
-    return () => unsubscribe();
-  }, [uid]);
+    if (currentUser?.data)
+      setProfileData(currentUser?.data);
+      setEditProfileData(currentUser?.data);
+
+  }, [currentUser]);
 
   // Cargar lista de asistentes (todos los usuarios excepto el actual)
   useEffect(() => {
@@ -108,6 +105,7 @@ const Dashboard = () => {
     try {
       const docRef = doc(db, 'users', uid);
       await updateDoc(docRef, editProfileData);
+      setProfileData(editProfileData); // Update context
       setEditModalOpened(false);
     } catch (error) {
       console.error('Error al actualizar el perfil:', error);

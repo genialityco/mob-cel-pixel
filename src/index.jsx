@@ -9,6 +9,7 @@ import "@mantine/dates/styles.css";
 import { Notifications } from "@mantine/notifications";
 import { ModalsProvider } from "@mantine/modals";
 import { BrowserRouter } from "react-router-dom";
+import { UserProvider } from "./context/UserContext.jsx";
 
 const theme = createTheme({
   fontFamily: "Playfair Display, serif",
@@ -27,6 +28,7 @@ const theme = createTheme({
 
 createRoot(document.getElementById("root")).render(
   // <StrictMode>
+   <UserProvider>
   <BrowserRouter>
     <MantineProvider theme={theme}>
       <ModalsProvider>
@@ -35,5 +37,6 @@ createRoot(document.getElementById("root")).render(
       </ModalsProvider>
     </MantineProvider>
   </BrowserRouter>
+  </UserProvider>
   // </StrictMode>
 );
