@@ -8,13 +8,13 @@ import { UserContext } from "./context/UserContext";
 import UserProfile from "./components/UserProfile";
 
 const App = () => {
-  const { userLoading } = useContext(UserContext);
-
+  const { userLoading, currentUser } = useContext(UserContext);
+  
   if (userLoading) return <h1>Cargando Usuario...</h1>;
 
   return (
     <div>
-      <UserProfile />
+      {currentUser?.data && (<UserProfile />)}
       <Routes>
         <Route path="/" element={<Landing />} />
         <Route path="/dashboard" element={<Dashboard />} />
