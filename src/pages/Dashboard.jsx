@@ -414,18 +414,45 @@ const Dashboard = () => {
             {filteredAssistants.length > 0 ? (
               filteredAssistants.map((assistant) => (
                 <Grid.Col xs={12} sm={6} md={4} key={assistant.id}>
-                  <Card shadow="sm" p="lg">
-                    <Title order={5}>{assistant.nombre}</Title>
-                    <Text size="sm">{assistant.empresa}</Text>
-                    <Text size="sm">{assistant.cargo}</Text>
-                    <Button
-                      mt="sm"
-                      fullWidth
-                      onClick={() => sendMeetingRequest(assistant.id)}
-                    >
-                      Solicitar reunión
-                    </Button>
-                  </Card>
+                  <Grid.Col xs={12} sm={6} md={4} key={assistant.id}>
+                    <Card shadow="sm" p="lg">
+                      <Title order={5}>📛 {assistant.nombre}</Title>
+                      <Text size="sm">
+                        🏢 <strong>Empresa:</strong> {assistant.empresa}
+                      </Text>
+                      <Text size="sm">
+                        🏷 <strong>Cargo:</strong> {assistant.cargo}
+                      </Text>
+                      <Text size="sm">
+                        📧 <strong>Correo:</strong>{" "}
+                        {assistant.correo || "No disponible"}
+                      </Text>
+                      <Text size="sm">
+                        📞 <strong>Teléfono:</strong>{" "}
+                        {assistant.telefono || "No disponible"}
+                      </Text>
+                      <Text size="sm">
+                        📝 <strong>Descripción:</strong>{" "}
+                        {assistant.descripcion || "No especificada"}
+                      </Text>
+                      <Text size="sm">
+                        🎯 <strong>Interés Principal:</strong>{" "}
+                        {assistant.interesPrincipal || "No especificado"}
+                      </Text>
+                      <Text size="sm">
+                        🔍 <strong>Necesidad:</strong>{" "}
+                        {assistant.necesidad || "No especificada"}
+                      </Text>
+
+                      <Button
+                        mt="sm"
+                        fullWidth
+                        onClick={() => sendMeetingRequest(assistant.id)}
+                      >
+                        Solicitar reunión
+                      </Button>
+                    </Card>
+                  </Grid.Col>
                 </Grid.Col>
               ))
             ) : (
@@ -496,16 +523,37 @@ const Dashboard = () => {
                         {requester ? (
                           <>
                             <Text>
-                              <strong>Solicitud de reunión de:</strong>{" "}
-                              {requester.nombre}
-                            </Text>
-                            <Text size="sm">Empresa: {requester.empresa}</Text>
-                            <Text size="sm">Cargo: {requester.cargo}</Text>
-                            <Text size="sm">
-                              Correo: {requester.email || "No disponible"}
+                              <strong>📛 Nombre:</strong> {requester.nombre}
                             </Text>
                             <Text size="sm">
-                              Teléfono: {requester.phone || "No disponible"}
+                              🏢 <strong>Empresa:</strong> {requester.empresa}
+                            </Text>
+                            <Text size="sm">
+                              🏷 <strong>Cargo:</strong> {requester.cargo}
+                            </Text>
+                            <Text size="sm">
+                              📧 <strong>Correo:</strong>{" "}
+                              {requester.correo || "No disponible"}
+                            </Text>
+                            <Text size="sm">
+                              📞 <strong>Teléfono:</strong>{" "}
+                              {requester.telefono || "No disponible"}
+                            </Text>
+                            <Text size="sm">
+                              🆔 <strong>Cédula:</strong>{" "}
+                              {requester.cedula || "No disponible"}
+                            </Text>
+                            <Text size="sm">
+                              📝 <strong>Descripción:</strong>{" "}
+                              {requester.descripcion || "No especificada"}
+                            </Text>
+                            <Text size="sm">
+                              🎯 <strong>Interés Principal:</strong>{" "}
+                              {requester.interesPrincipal || "No especificado"}
+                            </Text>
+                            <Text size="sm">
+                              🔍 <strong>Necesidad:</strong>{" "}
+                              {requester.necesidad || "No especificada"}
                             </Text>
                           </>
                         ) : (
@@ -551,16 +599,37 @@ const Dashboard = () => {
                         {requester ? (
                           <>
                             <Text>
-                              <strong>Solicitud aceptada de:</strong>{" "}
-                              {requester.nombre}
-                            </Text>
-                            <Text size="sm">Empresa: {requester.empresa}</Text>
-                            <Text size="sm">Cargo: {requester.cargo}</Text>
-                            <Text size="sm">
-                              Correo: {requester.email || "No disponible"}
+                              <strong>📛 Nombre:</strong> {requester.nombre}
                             </Text>
                             <Text size="sm">
-                              Teléfono: {requester.phone || "No disponible"}
+                              🏢 <strong>Empresa:</strong> {requester.empresa}
+                            </Text>
+                            <Text size="sm">
+                              🏷 <strong>Cargo:</strong> {requester.cargo}
+                            </Text>
+                            <Text size="sm">
+                              📧 <strong>Correo:</strong>{" "}
+                              {requester.correo || "No disponible"}
+                            </Text>
+                            <Text size="sm">
+                              📞 <strong>Teléfono:</strong>{" "}
+                              {requester.telefono || "No disponible"}
+                            </Text>
+                            <Text size="sm">
+                              🆔 <strong>Cédula:</strong>{" "}
+                              {requester.cedula || "No disponible"}
+                            </Text>
+                            <Text size="sm">
+                              📝 <strong>Descripción:</strong>{" "}
+                              {requester.descripcion || "No especificada"}
+                            </Text>
+                            <Text size="sm">
+                              🎯 <strong>Interés Principal:</strong>{" "}
+                              {requester.interesPrincipal || "No especificado"}
+                            </Text>
+                            <Text size="sm">
+                              🔍 <strong>Necesidad:</strong>{" "}
+                              {requester.necesidad || "No especificada"}
                             </Text>
                             <Text size="sm">
                               <strong>Horario:</strong>{" "}
@@ -596,19 +665,40 @@ const Dashboard = () => {
                         {requester ? (
                           <>
                             <Text>
-                              <strong>Solicitud rechazada de:</strong>{" "}
-                              {requester.nombre}
-                            </Text>
-                            <Text size="sm">Empresa: {requester.empresa}</Text>
-                            <Text size="sm">Cargo: {requester.cargo}</Text>
-                            <Text size="sm">
-                              Correo: {requester.email || "No disponible"}
+                              <strong>📛 Nombre:</strong> {requester.nombre}
                             </Text>
                             <Text size="sm">
-                              Teléfono: {requester.phone || "No disponible"}
+                              🏢 <strong>Empresa:</strong> {requester.empresa}
+                            </Text>
+                            <Text size="sm">
+                              🏷 <strong>Cargo:</strong> {requester.cargo}
+                            </Text>
+                            <Text size="sm">
+                              📧 <strong>Correo:</strong>{" "}
+                              {requester.correo || "No disponible"}
+                            </Text>
+                            <Text size="sm">
+                              📞 <strong>Teléfono:</strong>{" "}
+                              {requester.telefono || "No disponible"}
+                            </Text>
+                            <Text size="sm">
+                              🆔 <strong>Cédula:</strong>{" "}
+                              {requester.cedula || "No disponible"}
+                            </Text>
+                            <Text size="sm">
+                              📝 <strong>Descripción:</strong>{" "}
+                              {requester.descripcion || "No especificada"}
+                            </Text>
+                            <Text size="sm">
+                              🎯 <strong>Interés Principal:</strong>{" "}
+                              {requester.interesPrincipal || "No especificado"}
+                            </Text>
+                            <Text size="sm">
+                              🔍 <strong>Necesidad:</strong>{" "}
+                              {requester.necesidad || "No especificada"}
                             </Text>
                             <Text size="sm" color="red">
-                              Esta solicitud fue rechazada.
+                              <strong>Esta solicitud fue rechazada.</strong>
                             </Text>
                           </>
                         ) : (
