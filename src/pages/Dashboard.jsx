@@ -208,135 +208,128 @@ const Dashboard = () => {
 
   const updateMeetingStatus = async (meetingId, newStatus) => {
     try {
-      const meetingDocRef = doc(db, "meetings", meetingId);
+        const meetingDocRef = doc(db, "meetings", meetingId);
+        const meetingSnap = await getDoc(meetingDocRef);
+        if (!meetingSnap.exists()) return;
 
-      // 1. Obtener los datos de la reunión
-      const meetingSnap = await getDoc(meetingDocRef);
-      if (!meetingSnap.exists()) return;
+        const meetingData = meetingSnap.data();
+        const requesterId = meetingData.requesterId;
+        const receiverId = meetingData.receiverId;
 
-      const meetingData = meetingSnap.data();
-
-      // Si la reunión ya está aceptada, no volver a procesarla
-      if (meetingData.status === "accepted") {
-        alert("Esta reunión ya fue aceptada.");
-        return;
-      }
-
-      if (newStatus === "accepted") {
-        // 2. Validar que el usuario no tenga más de 4 reuniones aceptadas
-        const acceptedQuery = query(
-          collection(db, "meetings"),
-          where("participants", "array-contains", uid),
-          where("status", "==", "accepted")
-        );
-        const acceptedSnapshot = await getDocs(acceptedQuery);
-
-        if (acceptedSnapshot.size >= 4) {
-          alert("El usuario ya tiene 4 citas agendadas.");
-          return;
+        // Si la reunión ya está aceptada, no volver a procesarla
+        if (meetingData.status === "accepted") {
+            alert("Esta reunión ya fue aceptada.");
+            return;
         }
 
-        // 3. Obtener los horarios ocupados del usuario (tanto como solicitante y receptor)
-        const occupiedTimeSlots = new Set();
-        acceptedSnapshot.forEach((meeting) => {
-          occupiedTimeSlots.add(meeting.data().timeSlot);
-        });
+        if (newStatus === "accepted") {
+            // 1. Obtener todas las reuniones aceptadas de ambos participantes
+            const acceptedMeetingsQuery = query(
+                collection(db, "meetings"),
+                where("participants", "array-contains-any", [requesterId, receiverId]),
+                where("status", "==", "accepted")
+            );
+            const acceptedMeetingsSnapshot = await getDocs(acceptedMeetingsQuery);
 
-        // 4. Buscar un slot disponible que no tenga conflictos
-        const agendaQuery = query(
-          collection(db, "agenda"),
-          where("available", "==", true),
-          orderBy("startTime")
-        );
-        const agendaSnapshot = await getDocs(agendaQuery);
+            // 2. Obtener los horarios ocupados por cualquiera de los dos participantes
+            const occupiedTimeSlots = new Set();
+            acceptedMeetingsSnapshot.forEach((meeting) => {
+                occupiedTimeSlots.add(meeting.data().timeSlot);
+            });
 
-        let selectedSlot = null;
-        let selectedSlotDoc = null;
+            // 3. Buscar un slot disponible en la agenda
+            const agendaQuery = query(
+                collection(db, "agenda"),
+                where("available", "==", true),
+                orderBy("startTime")
+            );
+            const agendaSnapshot = await getDocs(agendaQuery);
 
-        for (const agendaDoc of agendaSnapshot.docs) {
-          const agendaData = agendaDoc.data();
-          const timeSlot = `${agendaData.startTime} - ${agendaData.endTime}`;
+            let selectedSlot = null;
+            let selectedSlotDoc = null;
 
-          if (!occupiedTimeSlots.has(timeSlot)) {
-            selectedSlot = agendaData;
-            selectedSlotDoc = agendaDoc;
-            break;
-          }
+            for (const agendaDoc of agendaSnapshot.docs) {
+                const agendaData = agendaDoc.data();
+                const timeSlot = `${agendaData.startTime} - ${agendaData.endTime}`;
+
+                // 4. Verificar si el horario ya está ocupado por cualquiera de los dos participantes
+                if (!occupiedTimeSlots.has(timeSlot)) {
+                    selectedSlot = agendaData;
+                    selectedSlotDoc = agendaDoc;
+                    break;
+                }
+            }
+
+            // 5. Si no hay horarios disponibles, mostrar mensaje de error
+            if (!selectedSlot) {
+                alert("No hay horarios disponibles para agendar esta reunión.");
+                return;
+            }
+
+            // 6. Validar si alguno de los dos ya tiene reunión en el horario seleccionado
+            const conflictingMeeting = acceptedMeetingsSnapshot.docs.find(
+                (doc) => doc.data().timeSlot === `${selectedSlot.startTime} - ${selectedSlot.endTime}`
+            );
+
+            if (conflictingMeeting) {
+                alert("No puedes aceptar esta reunión porque ya tienes una en el mismo horario.");
+                return;
+            }
+
+            // 7. Asignar el slot encontrado a la reunión
+            await updateDoc(meetingDocRef, {
+                status: "accepted",
+                tableAssigned: selectedSlot.tableNumber.toString(),
+                timeSlot: `${selectedSlot.startTime} - ${selectedSlot.endTime}`,
+            });
+
+            // 8. Marcar el slot en la agenda como ocupado
+            const agendaDocRef = doc(db, "agenda", selectedSlotDoc.id);
+            await updateDoc(agendaDocRef, {
+                available: false,
+                meetingId,
+            });
+
+            // 9. Crear una notificación para el solicitante
+            await addDoc(collection(db, "notifications"), {
+                userId: requesterId,
+                title: "Reunión aceptada",
+                message: `Tu solicitud de reunión fue aceptada.`,
+                timestamp: new Date(),
+                read: false,
+            });
+
+            showNotification({
+                title: "Reunión aceptada",
+                message: "Has aceptado la reunión exitosamente.",
+                color: "green",
+                position: "top-right",
+            });
+        } else {
+            // Si se rechaza, simplemente actualizar el estado
+            await updateDoc(meetingDocRef, { status: newStatus });
+
+            // Enviar notificación al usuario solicitante
+            await addDoc(collection(db, "notifications"), {
+                userId: requesterId,
+                title: "Reunión rechazada",
+                message: `Tu solicitud de reunión fue rechazada.`,
+                timestamp: new Date(),
+                read: false,
+            });
+
+            showNotification({
+                title: "Reunión rechazada",
+                message: "Has rechazado la reunión.",
+                color: "red",
+                position: "top-right",
+            });
         }
-
-        // 5. Si no hay horarios disponibles, mostrar mensaje de error
-        if (!selectedSlot) {
-          alert("No hay horarios disponibles para agendar esta reunión.");
-          return;
-        }
-
-        // 6. Validar si el usuario ya tiene una reunión en el mismo horario
-        const conflictingMeeting = acceptedSnapshot.docs.find(
-          (doc) =>
-            doc.data().timeSlot ===
-            `${selectedSlot.startTime} - ${selectedSlot.endTime}`
-        );
-
-        if (conflictingMeeting) {
-          alert(
-            "No puedes aceptar esta reunión porque ya tienes una en el mismo horario."
-          );
-          return;
-        }
-
-        // 7. Asignar el slot encontrado a la reunión
-        await updateDoc(meetingDocRef, {
-          status: "accepted",
-          tableAssigned: selectedSlot.tableNumber.toString(),
-          timeSlot: `${selectedSlot.startTime} - ${selectedSlot.endTime}`,
-        });
-
-        // 8. Marcar el slot en la agenda como ocupado
-        const agendaDocRef = doc(db, "agenda", selectedSlotDoc.id);
-        await updateDoc(agendaDocRef, {
-          available: false,
-          meetingId,
-        });
-
-        // 9. Crear una notificación para el solicitante
-        await addDoc(collection(db, "notifications"), {
-          userId: meetingData.requesterId,
-          title: "Reunión aceptada",
-          message: `Tu solicitud de reunión fue aceptada.`,
-          timestamp: new Date(),
-          read: false,
-        });
-
-        showNotification({
-          title: "Reunión aceptada",
-          message: "Has aceptado la reunión exitosamente.",
-          color: "green",
-          position: "top-right",
-        });
-      } else {
-        // Si se rechaza, simplemente actualizar el estado
-        await updateDoc(meetingDocRef, { status: newStatus });
-
-        // Enviar notificación al usuario solicitante
-        await addDoc(collection(db, "notifications"), {
-          userId: meetingData.requesterId,
-          title: "Reunión rechazada",
-          message: `Tu solicitud de reunión fue rechazada.`,
-          timestamp: new Date(),
-          read: false,
-        });
-
-        showNotification({
-          title: "Reunión rechazada",
-          message: "Has rechazado la reunión.",
-          color: "red",
-          position: "top-right",
-        });
-      }
     } catch (error) {
-      console.error("Error al actualizar la reunión:", error);
+        console.error("Error al actualizar la reunión:", error);
     }
-  };
+};
+
 
   return (
     <Container>
