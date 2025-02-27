@@ -13,6 +13,7 @@ import {
   Indicator,
   ActionIcon,
   Flex,
+  TextInput,
 } from "@mantine/core";
 import {
   collection,
@@ -37,8 +38,11 @@ const Dashboard = () => {
   const uid = currentUser?.uid;
   const navigate = useNavigate();
 
+  const [searchTerm, setSearchTerm] = useState("");
+
   // Estados para asistentes, reuniones y solicitudes
   const [assistants, setAssistants] = useState([]);
+  const [filteredAssistants, setFilteredAssistants] = useState([]);
   const [acceptedMeetings, setAcceptedMeetings] = useState([]);
   const [pendingRequests, setPendingRequests] = useState([]);
   const [acceptedRequests, setAcceptedRequests] = useState([]);
@@ -91,14 +95,26 @@ const Dashboard = () => {
   useEffect(() => {
     const q = query(collection(db, "users"));
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      setAssistants(
-        snapshot.docs
-          .filter((docItem) => docItem.id !== uid)
-          .map((docItem) => ({ id: docItem.id, ...docItem.data() }))
-      );
+      const assistantsData = snapshot.docs
+        .filter((docItem) => docItem.id !== uid)
+        .map((docItem) => ({ id: docItem.id, ...docItem.data() }));
+
+      setAssistants(assistantsData);
+      setFilteredAssistants(assistantsData);
     });
+
     return () => unsubscribe();
   }, [uid]);
+
+  // Filtrar asistentes cuando cambia el searchTerm
+  useEffect(() => {
+    const filtered = assistants.filter(
+      (assistant) =>
+        assistant.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        assistant.empresa.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+    setFilteredAssistants(filtered);
+  }, [searchTerm, assistants]);
 
   // Cargar reuniones aceptadas
   useEffect(() => {
@@ -220,7 +236,7 @@ const Dashboard = () => {
           return;
         }
 
-        // 3. Obtener los horarios ocupados del usuario
+        // 3. Obtener los horarios ocupados del usuario (tanto como solicitante y receptor)
         const occupiedTimeSlots = new Set();
         acceptedSnapshot.forEach((meeting) => {
           occupiedTimeSlots.add(meeting.data().timeSlot);
@@ -254,44 +270,68 @@ const Dashboard = () => {
           return;
         }
 
-        // 6. Asignar el slot encontrado a la reunión
+        // 6. Validar si el usuario ya tiene una reunión en el mismo horario
+        const conflictingMeeting = acceptedSnapshot.docs.find(
+          (doc) =>
+            doc.data().timeSlot ===
+            `${selectedSlot.startTime} - ${selectedSlot.endTime}`
+        );
+
+        if (conflictingMeeting) {
+          alert(
+            "No puedes aceptar esta reunión porque ya tienes una en el mismo horario."
+          );
+          return;
+        }
+
+        // 7. Asignar el slot encontrado a la reunión
         await updateDoc(meetingDocRef, {
           status: "accepted",
           tableAssigned: selectedSlot.tableNumber.toString(),
           timeSlot: `${selectedSlot.startTime} - ${selectedSlot.endTime}`,
         });
 
-        // 7. Marcar el slot en la agenda como ocupado
+        // 8. Marcar el slot en la agenda como ocupado
         const agendaDocRef = doc(db, "agenda", selectedSlotDoc.id);
         await updateDoc(agendaDocRef, {
           available: false,
           meetingId,
         });
 
+        // 9. Crear una notificación para el solicitante
         await addDoc(collection(db, "notifications"), {
           userId: meetingData.requesterId,
-          title:
-            newStatus === "accepted" ? "Reunión aceptada" : "Reunión rechazada",
-          message: `Tu solicitud de reunión fue ${
-            newStatus === "accepted" ? "aceptada" : "rechazada"
-          }.`,
+          title: "Reunión aceptada",
+          message: `Tu solicitud de reunión fue aceptada.`,
           timestamp: new Date(),
           read: false,
         });
 
         showNotification({
-          title: `Reunión ${
-            newStatus === "accepted" ? "aceptada" : "rechazada"
-          }`,
-          message: `Has ${
-            newStatus === "accepted" ? "aceptado" : "rechazado"
-          } la reunión.`,
-          color: newStatus === "accepted" ? "green" : "red",
+          title: "Reunión aceptada",
+          message: "Has aceptado la reunión exitosamente.",
+          color: "green",
           position: "top-right",
         });
       } else {
         // Si se rechaza, simplemente actualizar el estado
         await updateDoc(meetingDocRef, { status: newStatus });
+
+        // Enviar notificación al usuario solicitante
+        await addDoc(collection(db, "notifications"), {
+          userId: meetingData.requesterId,
+          title: "Reunión rechazada",
+          message: `Tu solicitud de reunión fue rechazada.`,
+          timestamp: new Date(),
+          read: false,
+        });
+
+        showNotification({
+          title: "Reunión rechazada",
+          message: "Has rechazado la reunión.",
+          color: "red",
+          position: "top-right",
+        });
       }
     } catch (error) {
       console.error("Error al actualizar la reunión:", error);
@@ -348,9 +388,15 @@ const Dashboard = () => {
 
         {/* TAB ASISTENTES */}
         <Tabs.Panel value="asistentes" pt="md">
+          <TextInput
+            placeholder="Buscar por nombre o empresa..."
+            mb="md"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
           <Grid>
-            {assistants.length > 0 ? (
-              assistants.map((assistant) => (
+            {filteredAssistants.length > 0 ? (
+              filteredAssistants.map((assistant) => (
                 <Grid.Col xs={12} sm={6} md={4} key={assistant.id}>
                   <Card shadow="sm" p="lg">
                     <Title order={5}>{assistant.nombre}</Title>
