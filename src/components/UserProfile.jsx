@@ -20,7 +20,7 @@ import { FaChevronDown, FaChevronUp } from "react-icons/fa";
 import { UserContext } from "../context/UserContext";
 
 const UserProfile = () => {
-  const { currentUser, updateUser, logout } =
+  const { currentUser, updateUser, logout, userLoading } =
     useContext(UserContext);
   const uid = currentUser?.uid;
 
@@ -44,7 +44,7 @@ const UserProfile = () => {
     }
   };
 
-  if (currentUser === undefined) return <Loader />;
+  if (userLoading) return <Loader />;
 
   return (
     <Card shadow="md" style={{ maxWidth: 800, margin: "20px auto" }}>

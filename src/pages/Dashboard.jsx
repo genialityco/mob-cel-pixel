@@ -25,35 +25,34 @@ import {
 import { db } from "../firebase/firebaseConfig";
 import { UserContext } from "../context/UserContext";
 import { useNavigate } from "react-router-dom";
+import { showNotification } from "@mantine/notifications";
 
 const Dashboard = () => {
   const { currentUser } = useContext(UserContext);
   const uid = currentUser?.uid;
   const navigate = useNavigate();
 
-  // Estados para asistentes, reuniones y detalles de participantes
+  // Estados para asistentes, reuniones y solicitudes
   const [assistants, setAssistants] = useState([]);
   const [acceptedMeetings, setAcceptedMeetings] = useState([]);
   const [pendingRequests, setPendingRequests] = useState([]);
+  const [acceptedRequests, setAcceptedRequests] = useState([]);
+  const [rejectedRequests, setRejectedRequests] = useState([]);
   const [participantsInfo, setParticipantsInfo] = useState({});
 
   useEffect(() => {
-    if (currentUser === null) {
-      navigate("/");
-    }
+    if (!currentUser?.data) navigate("/");
   }, [currentUser, navigate]);
 
-  // Cargar lista de asistentes (excluyendo al usuario actual)
+  // Cargar asistentes excluyendo al usuario actual
   useEffect(() => {
     const q = query(collection(db, "users"));
-    const unsubscribe = onSnapshot(q, (querySnapshot) => {
-      const users = [];
-      querySnapshot.forEach((docItem) => {
-        if (docItem.id !== uid) {
-          users.push({ id: docItem.id, ...docItem.data() });
-        }
-      });
-      setAssistants(users);
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      setAssistants(
+        snapshot.docs
+          .filter((docItem) => docItem.id !== uid)
+          .map((docItem) => ({ id: docItem.id, ...docItem.data() }))
+      );
     });
     return () => unsubscribe();
   }, [uid]);
@@ -65,6 +64,7 @@ const Dashboard = () => {
       where("status", "==", "accepted"),
       where("participants", "array-contains", uid)
     );
+
     const unsubscribe = onSnapshot(q, async (snapshot) => {
       const meetings = [];
       const participantsData = {};
@@ -73,7 +73,7 @@ const Dashboard = () => {
         const meeting = { id: docItem.id, ...docItem.data() };
         meetings.push(meeting);
 
-        // Obtener información del otro participante
+        // Obtener info del otro participante
         const otherUserId =
           meeting.requesterId === uid
             ? meeting.receiverId
@@ -90,23 +90,30 @@ const Dashboard = () => {
       setAcceptedMeetings(meetings);
       setParticipantsInfo(participantsData);
     });
+
     return () => unsubscribe();
   }, [uid]);
 
-  // Cargar solicitudes de reunión pendientes
+  // Cargar solicitudes
   useEffect(() => {
-    const q = query(
-      collection(db, "meetings"),
-      where("receiverId", "==", uid),
-      where("status", "==", "pending")
-    );
+    const q = query(collection(db, "meetings"), where("receiverId", "==", uid));
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const requests = [];
+      const pending = [];
+      const accepted = [];
+      const rejected = [];
+
       snapshot.forEach((docItem) => {
-        requests.push({ id: docItem.id, ...docItem.data() });
+        const data = { id: docItem.id, ...docItem.data() };
+        if (data.status === "pending") pending.push(data);
+        else if (data.status === "accepted") accepted.push(data);
+        else if (data.status === "rejected") rejected.push(data);
       });
-      setPendingRequests(requests);
+
+      setPendingRequests(pending);
+      setAcceptedRequests(accepted);
+      setRejectedRequests(rejected);
     });
+
     return () => unsubscribe();
   }, [uid]);
 
@@ -120,6 +127,13 @@ const Dashboard = () => {
         createdAt: new Date(),
         participants: [uid, assistantId],
       });
+
+      showNotification({
+        title: "Solicitud enviada",
+        message: "Tu solicitud de reunión ha sido enviada correctamente.",
+        color: "blue",
+        position: "top-right"
+      })
     } catch (error) {
       console.error("Error al enviar la solicitud de reunión:", error);
     }
@@ -203,7 +217,12 @@ const Dashboard = () => {
           meetingId,
         });
 
-        alert("Reunión aceptada y asignada correctamente.");
+        showNotification({
+          title: `Reunión ${newStatus === "accepted" ? "aceptada" : "rechazada"}`,
+          message: `Has ${newStatus === "accepted" ? "aceptado" : "rechazado"} la reunión.`,
+          color: newStatus === "accepted" ? "green" : "red",
+          position: "top-right"
+        });
       } else {
         // Si se rechaza, simplemente actualizar el estado
         await updateDoc(meetingDocRef, { status: newStatus });
@@ -222,9 +241,10 @@ const Dashboard = () => {
         <Tabs.List>
           <Tabs.Tab value="asistentes">Asistentes</Tabs.Tab>
           <Tabs.Tab value="reuniones">Reuniones</Tabs.Tab>
+          <Tabs.Tab value="solicitudes">Solicitudes</Tabs.Tab>
         </Tabs.List>
 
-        {/* Pestaña de Asistentes */}
+        {/* TAB ASISTENTES */}
         <Tabs.Panel value="asistentes" pt="md">
           <Grid>
             {assistants.length > 0 ? (
@@ -250,65 +270,51 @@ const Dashboard = () => {
           </Grid>
         </Tabs.Panel>
 
-        {/* Pestaña de Reuniones */}
+        {/* TAB REUNIONES */}
         <Tabs.Panel value="reuniones" pt="md">
-          <Tabs defaultValue="agenda">
+          <Stack>
+            {acceptedMeetings.length > 0 ? (
+              acceptedMeetings.map((meeting) => {
+                const otherUserId =
+                  meeting.requesterId === uid
+                    ? meeting.receiverId
+                    : meeting.requesterId;
+                const participant = participantsInfo[otherUserId];
+
+                return (
+                  <Card key={meeting.id} shadow="sm" p="lg">
+                    <Text>
+                      <strong>Reunión con:</strong>{" "}
+                      {participant ? participant.nombre : "Cargando..."}
+                    </Text>
+                    <Text>
+                      <strong>Horario:</strong>{" "}
+                      {meeting.timeSlot || "Por asignar"}
+                    </Text>
+                    <Text>
+                      <strong>Mesa:</strong>{" "}
+                      {meeting.tableAssigned || "Por asignar"}
+                    </Text>
+                  </Card>
+                );
+              })
+            ) : (
+              <Text>No tienes reuniones aceptadas.</Text>
+            )}
+          </Stack>
+        </Tabs.Panel>
+
+        {/* TAB SOLICITUDES */}
+        <Tabs.Panel value="solicitudes" pt="md">
+          <Tabs defaultValue="pendientes">
             <Tabs.List>
-              <Tabs.Tab value="agenda">Agenda</Tabs.Tab>
-              <Tabs.Tab value="solicitudes">Solicitudes</Tabs.Tab>
+              <Tabs.Tab value="pendientes">Pendientes</Tabs.Tab>
+              <Tabs.Tab value="aceptadas">Aceptadas</Tabs.Tab>
+              <Tabs.Tab value="rechazadas">Rechazadas</Tabs.Tab>
             </Tabs.List>
 
-            {/* Reuniones aceptadas */}
-            <Tabs.Panel value="agenda" pt="md">
-              <Stack>
-                {acceptedMeetings.length > 0 ? (
-                  acceptedMeetings.map((meeting) => {
-                    const otherUserId =
-                      meeting.requesterId === uid
-                        ? meeting.receiverId
-                        : meeting.requesterId;
-                    const participant = participantsInfo[otherUserId];
-
-                    return (
-                      <Card key={meeting.id} shadow="sm" p="lg">
-                        <Text>
-                          <strong>Reunión con:</strong>{" "}
-                          {participant ? participant.nombre : "Cargando..."}
-                        </Text>
-                        <Text>
-                          <strong>Empresa:</strong>{" "}
-                          {participant?.empresa || "No disponible"}
-                        </Text>
-                        <Text>
-                          <strong>Cargo:</strong>{" "}
-                          {participant?.cargo || "No disponible"}
-                        </Text>
-                        <Text>
-                          <strong>Contacto:</strong>{" "}
-                          {participant?.contacto?.correo || "No proporcionado"}{" "}
-                          -{" "}
-                          {participant?.contacto?.telefono ||
-                            "No proporcionado"}
-                        </Text>
-                        <Text>
-                          <strong>Horario:</strong>{" "}
-                          {meeting.timeSlot || "Por asignar"}
-                        </Text>
-                        <Text>
-                          <strong>Mesa:</strong>{" "}
-                          {meeting.tableAssigned || "Por asignar"}
-                        </Text>
-                      </Card>
-                    );
-                  })
-                ) : (
-                  <Text>No tienes reuniones aceptadas.</Text>
-                )}
-              </Stack>
-            </Tabs.Panel>
-
-            {/* Solicitudes de reunión pendientes */}
-            <Tabs.Panel value="solicitudes" pt="md">
+            {/* TAB DE SOLICITUDES PENDIENTES */}
+            <Tabs.Panel value="pendientes" pt="md">
               <Stack>
                 {pendingRequests.length > 0 ? (
                   pendingRequests.map((request) => {
@@ -352,6 +358,79 @@ const Dashboard = () => {
                   })
                 ) : (
                   <Text>No tienes solicitudes de reunión pendientes.</Text>
+                )}
+              </Stack>
+            </Tabs.Panel>
+
+            {/* TAB DE SOLICITUDES ACEPTADAS */}
+            <Tabs.Panel value="aceptadas" pt="md">
+              <Stack>
+                {acceptedRequests.length > 0 ? (
+                  acceptedRequests.map((request) => {
+                    const requester = assistants.find(
+                      (user) => user.id === request.requesterId
+                    );
+                    return (
+                      <Card key={request.id} shadow="sm" p="lg">
+                        {requester ? (
+                          <>
+                            <Text>
+                              <strong>Solicitud aceptada de:</strong>{" "}
+                              {requester.nombre}
+                            </Text>
+                            <Text size="sm">Empresa: {requester.empresa}</Text>
+                            <Text size="sm">Cargo: {requester.cargo}</Text>
+                            <Text size="sm">
+                              <strong>Horario:</strong>{" "}
+                              {request.timeSlot || "Por asignar"}
+                            </Text>
+                            <Text size="sm">
+                              <strong>Mesa:</strong>{" "}
+                              {request.tableAssigned || "Por asignar"}
+                            </Text>
+                          </>
+                        ) : (
+                          <Text>Cargando información del solicitante...</Text>
+                        )}
+                      </Card>
+                    );
+                  })
+                ) : (
+                  <Text>No tienes solicitudes aceptadas.</Text>
+                )}
+              </Stack>
+            </Tabs.Panel>
+
+            {/* TAB DE SOLICITUDES RECHAZADAS */}
+            <Tabs.Panel value="rechazadas" pt="md">
+              <Stack>
+                {rejectedRequests.length > 0 ? (
+                  rejectedRequests.map((request) => {
+                    const requester = assistants.find(
+                      (user) => user.id === request.requesterId
+                    );
+                    return (
+                      <Card key={request.id} shadow="sm" p="lg">
+                        {requester ? (
+                          <>
+                            <Text>
+                              <strong>Solicitud rechazada de:</strong>{" "}
+                              {requester.nombre}
+                            </Text>
+                            <Text size="sm">Empresa: {requester.empresa}</Text>
+                            <Text size="sm">Cargo: {requester.cargo}</Text>
+                            <Text size="sm" color="red">
+                              Esta solicitud fue rechazada.
+                            </Text>
+                          </>
+                        ) : (
+                          <Text>Cargando información del solicitante...</Text>
+                        )}
+                      </Card>
+                    );
+                  })
+                ) : (
+                  <Text>No tienes solicitudes rechazadas.</Text>
                 )}
               </Stack>
             </Tabs.Panel>

@@ -88,6 +88,10 @@ const Landing = () => {
     setLoading(false);
   }, [currentUser, formValues, navigate, updateUser]);
 
+  const handleGoToDashboard = () => {
+    navigate("/dashboard");
+  };
+
   if (userLoading) return <Loader />;
 
   return (
@@ -183,6 +187,9 @@ const Landing = () => {
         <Button onClick={handleSubmit} loading={loading}>
           {currentUser?.data ? "Actualizar" : "Registrarse"}
         </Button>
+        {currentUser?.data && (
+          <Button onClick={handleGoToDashboard}>Ir a la dasboard</Button>
+        )}
       </Stack>
     </Paper>
   );
