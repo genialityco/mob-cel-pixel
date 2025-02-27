@@ -27,14 +27,14 @@ const generateTimeSlots = (start, end, duration) => {
 };
 
 const MatrixPage = () => {
-  // Estados para la configuración
   const [config, setConfig] = useState(null);
   const [agenda, setAgenda] = useState([]);
   const [meetings, setMeetings] = useState([]);
+  const [participantsInfo, setParticipantsInfo] = useState({});
   const [matrix, setMatrix] = useState([]);
   const tableRefs = useRef([]);
 
-  // Cargar Configuración de Firestore
+  // Cargar Configuración desde Firestore
   useEffect(() => {
     const fetchConfig = async () => {
       const configRef = doc(db, "config", "meetingConfig");
@@ -83,6 +83,28 @@ const MatrixPage = () => {
     return () => unsubscribe();
   }, [config]);
 
+  // Cargar Información de Participantes en Tiempo Real
+  useEffect(() => {
+    if (meetings.length === 0) return;
+
+    const fetchParticipants = async () => {
+      const usersData = {};
+      for (const meeting of meetings) {
+        for (const participantId of meeting.participants) {
+          if (!usersData[participantId]) {
+            const userDoc = await getDoc(doc(db, "users", participantId));
+            if (userDoc.exists()) {
+              usersData[participantId] = userDoc.data();
+            }
+          }
+        }
+      }
+      setParticipantsInfo(usersData);
+    };
+
+    fetchParticipants();
+  }, [meetings]);
+
   // Construcción de la Matriz con Datos Reales
   useEffect(() => {
     if (!config || agenda.length === 0) return;
@@ -90,7 +112,7 @@ const MatrixPage = () => {
     const { numTables, meetingDuration, startTime, endTime } = config;
     const timeSlots = generateTimeSlots(startTime, endTime, meetingDuration);
 
-    // Crear una matriz vacía basada en las mesas y los horarios
+    // Crear matriz vacía
     const newMatrix = Array.from({ length: numTables }, () =>
       Array(timeSlots.length)
         .fill()
@@ -121,13 +143,16 @@ const MatrixPage = () => {
       if (tableIndex >= 0 && timeSlotIndex >= 0) {
         newMatrix[tableIndex][timeSlotIndex] = {
           status: meeting.status,
-          participants: meeting.participants || [],
+          participants: meeting.participants.map(
+            (id) =>
+              participantsInfo[id] || { nombre: "Cargando...", empresa: "..." }
+          ),
         };
       }
     });
 
     setMatrix(newMatrix);
-  }, [config, agenda, meetings]);
+  }, [config, agenda, meetings, participantsInfo]);
 
   // Animación de colores con Anime.js
   useEffect(() => {
@@ -209,11 +234,20 @@ const MatrixPage = () => {
                         }
                       </td>
                       <td style={{ backgroundColor: getColor(slot.status) }}>
-                        {slot.status === "available"
-                          ? "Disponible"
-                          : `${slot.participants[0] || ""} & ${
-                              slot.participants[1] || ""
-                            } (${slot.status})`}
+                        {slot.status === "available" ? (
+                          "Disponible"
+                        ) : (
+                          <>
+                            <Text>
+                              <strong>Estado:</strong> {slot.status}
+                            </Text>
+                            {slot.participants.map((p, index) => (
+                              <Text key={index}>
+                                <strong>{p.nombre}</strong> ({p.empresa})
+                              </Text>
+                            ))}
+                          </>
+                        )}
                       </td>
                     </tr>
                   ))}

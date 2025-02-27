@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Container,
   Title,
@@ -10,21 +10,58 @@ import {
   Group,
   Text,
 } from "@mantine/core";
-import { doc, setDoc, addDoc, collection } from "firebase/firestore";
+import {
+  doc,
+  setDoc,
+  addDoc,
+  collection,
+  deleteDoc,
+  getDocs,
+  updateDoc,
+  getDoc,
+} from "firebase/firestore";
 import { db } from "../firebase/firebaseConfig";
 
 const AdminPanel = () => {
   // Estados para la configuración
   const [maxPersons, setMaxPersons] = useState(100);
   const [numTables, setNumTables] = useState(50);
-  const [meetingDuration, setMeetingDuration] = useState(10); // Tiempo de cada cita
-  const [breakTime, setBreakTime] = useState(5); // Tiempo de descanso entre citas
+  const [meetingDuration, setMeetingDuration] = useState(10);
+  const [breakTime, setBreakTime] = useState(5);
   const [startTime, setStartTime] = useState("09:00");
   const [endTime, setEndTime] = useState("18:00");
   const [tableNamesInput, setTableNamesInput] = useState("");
   const [message, setMessage] = useState("");
 
-  // Guardar la configuración en Firestore
+  // Estados para asignación manual
+  const [selectedTable, setSelectedTable] = useState("");
+  const [selectedTimeSlot, setSelectedTimeSlot] = useState("");
+  const [participant1, setParticipant1] = useState("");
+  const [participant2, setParticipant2] = useState("");
+
+  useEffect(() => {
+    const fetchConfig = async () => {
+      try {
+        const configDoc = await getDoc(doc(db, "config", "meetingConfig"));
+        if (configDoc.exists()) {
+          const data = configDoc.data();
+          setMaxPersons(data.maxPersons);
+          setNumTables(data.numTables);
+          setMeetingDuration(data.meetingDuration);
+          setBreakTime(data.breakTime);
+          setStartTime(data.startTime);
+          setEndTime(data.endTime);
+          setTableNamesInput(data.tableNames.join(", ")); // Convertimos el array en string
+        }
+      } catch (error) {
+        console.error("Error al cargar configuración:", error);
+      }
+    };
+
+    fetchConfig();
+  }, []);
+
+  // Guardar configuración en Firestore
   const saveConfig = async () => {
     try {
       let tableNames = [];
@@ -40,9 +77,8 @@ const AdminPanel = () => {
           setNumTables(tableNames.length);
         }
       } else {
-        tableNames = Array.from(
-          { length: numTables },
-          (_, i) => (i + 1).toString()
+        tableNames = Array.from({ length: numTables }, (_, i) =>
+          (i + 1).toString()
         );
       }
 
@@ -78,9 +114,11 @@ const AdminPanel = () => {
       .padStart(2, "0")}`;
   };
 
-  // Generar la agenda con tiempo de descanso entre citas
+  // Generar la agenda con descanso entre citas
   const generateAgenda = async () => {
     try {
+      await resetAgenda(); // Borrar agenda antes de generar nueva
+
       const startMinutes = timeToMinutes(startTime);
       const endMinutes = timeToMinutes(endTime);
       const totalSlots = Math.floor(
@@ -113,6 +151,63 @@ const AdminPanel = () => {
     }
   };
 
+  // Restablecer la agenda (Eliminar todas las citas)
+  const resetAgenda = async () => {
+    try {
+      // Eliminar todas las reuniones en la colección "meetings"
+      const meetingsSnapshot = await getDocs(collection(db, "meetings"));
+      meetingsSnapshot.forEach(async (docItem) => {
+        await deleteDoc(doc(db, "meetings", docItem.id));
+      });
+
+      // Marcar todos los slots en "agenda" como disponibles nuevamente
+      const agendaSnapshot = await getDocs(collection(db, "agenda"));
+      agendaSnapshot.forEach(async (docItem) => {
+        await updateDoc(doc(db, "agenda", docItem.id), {
+          available: true,
+          meetingId: null, // Removemos la reunión asignada
+        });
+      });
+
+      setMessage(
+        "Agenda restablecida: Todas las reuniones eliminadas y los horarios habilitados."
+      );
+    } catch (error) {
+      console.error("Error al restablecer la agenda:", error);
+      setMessage("Error al restablecer la agenda.");
+    }
+  };
+
+  // Asignar reunión manualmente
+  const assignMeetingManually = async () => {
+    try {
+      if (
+        !selectedTable ||
+        !selectedTimeSlot ||
+        !participant1 ||
+        !participant2
+      ) {
+        setMessage(
+          "Todos los campos son obligatorios para asignar una reunión."
+        );
+        return;
+      }
+
+      const meetingData = {
+        tableAssigned: selectedTable,
+        timeSlot: selectedTimeSlot,
+        status: "accepted",
+        participants: [participant1, participant2],
+      };
+
+      await addDoc(collection(db, "meetings"), meetingData);
+      setMessage("Reunión asignada manualmente con éxito.");
+    } catch (error) {
+      console.error("Error al asignar reunión:", error);
+      setMessage("Error al asignar reunión.");
+    }
+  };
+
   return (
     <Container>
       <Title order={2} mt="md" mb="md">
@@ -133,8 +228,8 @@ const AdminPanel = () => {
             min={1}
           />
           <TextInput
-            label="Nombres de mesas (separados por comas, opcional)"
-            placeholder="Ej. Mesa 1, Mesa 2, Mesa 3, ..."
+            label="Nombres de mesas (opcional)"
+            placeholder="Ej. Mesa 1, Mesa 2, ..."
             value={tableNamesInput}
             onChange={(e) => setTableNamesInput(e.target.value)}
           />
@@ -162,21 +257,46 @@ const AdminPanel = () => {
             value={endTime}
             onChange={(e) => setEndTime(e.target.value)}
           />
-          <Text size="sm">
-            Cada cita durará {meetingDuration} minutos con un descanso de{" "}
-            {breakTime} minutos entre citas.
-          </Text>
           <Group position="center">
             <Button onClick={saveConfig}>Guardar Configuración</Button>
             <Button onClick={generateAgenda} color="blue">
               Generar Agenda
             </Button>
+            <Button onClick={resetAgenda} color="red">
+              Restablecer Agenda
+            </Button>
           </Group>
           {message && <Text color="green">{message}</Text>}
-          <Text size="sm">
-            Nota: La agenda se generará en la colección agenda con base en esta
-            configuración. Cada persona podrá agendar hasta 4 citas máximo.
-          </Text>
+        </Stack>
+
+        {/* Asignación Manual */}
+        <Title order={3} mt="xl">
+          Asignar Reunión Manualmente
+        </Title>
+        <Stack>
+          <TextInput
+            label="Número de Mesa"
+            value={selectedTable}
+            onChange={(e) => setSelectedTable(e.target.value)}
+          />
+          <TextInput
+            label="Horario"
+            value={selectedTimeSlot}
+            onChange={(e) => setSelectedTimeSlot(e.target.value)}
+          />
+          <TextInput
+            label="Participante 1"
+            value={participant1}
+            onChange={(e) => setParticipant1(e.target.value)}
+          />
+          <TextInput
+            label="Participante 2"
+            value={participant2}
+            onChange={(e) => setParticipant2(e.target.value)}
+          />
+          <Button onClick={assignMeetingManually} color="green">
+            Asignar Reunión
+          </Button>
         </Stack>
       </Paper>
     </Container>
