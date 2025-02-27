@@ -10,7 +10,7 @@ import {
   getDocs,
 } from "firebase/firestore";
 import { auth, db, messaging } from "../firebase/firebaseConfig";
-import { getToken, onMessage } from "firebase/messaging";
+import { onMessage } from "firebase/messaging";
 import { showNotification } from "@mantine/notifications";
 
 export const UserContext = createContext();
@@ -41,24 +41,24 @@ export const UserProvider = ({ children }) => {
         sessionStorage.setItem("currentUser", JSON.stringify(newUser));
 
         // Solicitar permiso de notificaciones
-        try {
-          const token = await getToken(messaging, {
-            vapidKey: import.meta.env.VITE_FIREBASE_VAPID_KEY,
-          });
+        // try {
+        //   const token = await getToken(messaging, {
+        //     vapidKey: import.meta.env.VITE_FIREBASE_VAPID_KEY,
+        //   });
 
-          if (token) {
-            console.log("Token FCM:", token);
-            await setDoc(
-              doc(db, "users", uid),
-              { fcmToken: token },
-              { merge: true }
-            );
-          } else {
-            console.log("No se obtuvo token de FCM.");
-          }
-        } catch (error) {
-          console.error("Error al obtener el token de notificación:", error);
-        }
+        //   if (token) {
+        //     console.log("Token FCM:", token);
+        //     await setDoc(
+        //       doc(db, "users", uid),
+        //       { fcmToken: token },
+        //       { merge: true }
+        //     );
+        //   } else {
+        //     console.log("No se obtuvo token de FCM.");
+        //   }
+        // } catch (error) {
+        //   console.error("Error al obtener el token de notificación:", error);
+        // }
       } else {
         try {
           const userCredential = await signInAnonymously(auth);
