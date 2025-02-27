@@ -66,48 +66,26 @@ const Dashboard = () => {
         ...doc.data(),
       }));
 
-      // Filtrar solo las notificaciones NO leídas
-      const unreadNotifications = newNotifications.filter(
-        (notif) => !notif.read
-      );
+      // Mostrar notificación en el frontend
+      newNotifications.forEach((notif) => {
+        if (!notif.read) {
+          showNotification({
+            title: notif.title,
+            message: notif.message,
+            color: "teal",
+            position: "top-right",
+          });
 
-      // Mostrar solo notificaciones no leídas en el frontend
-      unreadNotifications.forEach((notif) => {
-        showNotification({
-          title: notif.title,
-          message: notif.message,
-          color: getNotificationColor(notif.type),
-          position: "top-right",
-        });
-
-        // Marcar la notificación como leída en Firestore
-        updateDoc(doc(db, "notifications", notif.id), { read: true });
+          // Marcar la notificación como leída en Firestore
+          updateDoc(doc(db, "notifications", notif.id), { read: true });
+        }
       });
 
-      // Solo actualizar el estado si hay cambios
-      setNotifications((prev) => {
-        const prevIds = new Set(prev.map((n) => n.id));
-        const newIds = new Set(newNotifications.map((n) => n.id));
-        return prevIds.size !== newIds.size ? newNotifications : prev;
-      });
+      setNotifications(newNotifications);
     });
 
     return () => unsubscribe();
   }, [uid]);
-
-  // Función para definir color de la notificación
-  const getNotificationColor = (type) => {
-    switch (type) {
-      case "success":
-        return "green";
-      case "error":
-        return "red";
-      case "info":
-        return "blue";
-      default:
-        return "gray";
-    }
-  };
 
   useEffect(() => {
     if (!currentUser?.data) navigate("/");
@@ -202,25 +180,7 @@ const Dashboard = () => {
   // Enviar solicitud de reunión
   const sendMeetingRequest = async (assistantId) => {
     try {
-      const existingRequestQuery = query(
-        collection(db, "meetings"),
-        where("requesterId", "==", uid),
-        where("receiverId", "==", assistantId),
-        where("status", "==", "pending")
-      );
-
-      const existingRequestSnapshot = await getDocs(existingRequestQuery);
-      if (!existingRequestSnapshot.empty) {
-        showNotification({
-          title: "Solicitud pendiente",
-          message: "Ya has enviado una solicitud de reunión a esta persona.",
-          color: "orange",
-          position: "top-right",
-        });
-        return;
-      }
-
-      const meetingRef = await addDoc(collection(db, "meetings"), {
+      await addDoc(collection(db, "meetings"), {
         requesterId: uid,
         receiverId: assistantId,
         status: "pending",
@@ -232,8 +192,6 @@ const Dashboard = () => {
         userId: assistantId,
         title: "Nueva solicitud de reunión",
         message: `${currentUser.data.nombre} te ha enviado una solicitud de reunión.`,
-        type: "info",
-        meetingId: meetingRef.id,
         timestamp: new Date(),
         read: false,
       });
@@ -246,12 +204,6 @@ const Dashboard = () => {
       });
     } catch (error) {
       console.error("Error al enviar la solicitud de reunión:", error);
-      showNotification({
-        title: "Error",
-        message: "Hubo un problema al enviar la solicitud.",
-        color: "red",
-        position: "top-right",
-      });
     }
   };
 
@@ -284,15 +236,9 @@ const Dashboard = () => {
         const acceptedMeetingsSnapshot = await getDocs(acceptedMeetingsQuery);
 
         // 2. Obtener los horarios ocupados por cualquiera de los dos participantes
-        const occupiedTimeSlots = new Map(); // Guardar horarios ocupados por usuario
-
+        const occupiedTimeSlots = new Set();
         acceptedMeetingsSnapshot.forEach((meeting) => {
-          meeting.data().participants.forEach((participantId) => {
-            if (!occupiedTimeSlots.has(participantId)) {
-              occupiedTimeSlots.set(participantId, new Set());
-            }
-            occupiedTimeSlots.get(participantId).add(meeting.data().timeSlot);
-          });
+          occupiedTimeSlots.add(meeting.data().timeSlot);
         });
 
         // 3. Buscar un slot disponible en la agenda
@@ -305,96 +251,90 @@ const Dashboard = () => {
 
         let selectedSlot = null;
         let selectedSlotDoc = null;
-        let conflictingParticipant = null; // Para saber quién tiene conflicto de horario
 
         for (const agendaDoc of agendaSnapshot.docs) {
           const agendaData = agendaDoc.data();
           const timeSlot = `${agendaData.startTime} - ${agendaData.endTime}`;
 
           // 4. Verificar si el horario ya está ocupado por cualquiera de los dos participantes
-          if (
-            occupiedTimeSlots.get(requesterId)?.has(timeSlot) ||
-            occupiedTimeSlots.get(receiverId)?.has(timeSlot)
-          ) {
-            conflictingParticipant = occupiedTimeSlots
-              .get(requesterId)
-              ?.has(timeSlot)
-              ? requesterId
-              : receiverId;
-            continue; // Saltar al siguiente slot
+          if (!occupiedTimeSlots.has(timeSlot)) {
+            selectedSlot = agendaData;
+            selectedSlotDoc = agendaDoc;
+            break;
           }
-
-          selectedSlot = agendaData;
-          selectedSlotDoc = agendaDoc;
-          break;
         }
 
         // 5. Si no hay horarios disponibles, mostrar mensaje de error
         if (!selectedSlot) {
-          const conflictUser =
-            conflictingParticipant === requesterId
-              ? "El solicitante"
-              : "El receptor";
-          alert(`${conflictUser} ya tiene una reunión en este horario.`);
+          const requesterMeetings = acceptedMeetingsSnapshot.docs.filter(
+            (doc) => doc.data().participants.includes(requesterId)
+          ).length;
+          const receiverMeetings = acceptedMeetingsSnapshot.docs.filter(
+            (doc) => doc.data().participants.includes(receiverId)
+          ).length;
 
-          await addDoc(collection(db, "notifications"), {
-            userId: meetingData.requesterId,
-            title: "No se pudo agendar la reunión",
-            message: `${conflictUser} ya tiene una reunión en este horario. Por favor, intenta con otro horario.`,
-            type: "error",
-            timestamp: new Date(),
-            read: false,
-          });
-
-          showNotification({
-            title: "No se pudo agendar",
-            message: `${conflictUser} ya tiene una reunión en este horario.`,
-            color: "red",
-            position: "top-right",
-          });
+          if (requesterMeetings >= 2) {
+            alert("El solicitante ya tiene el máximo de reuniones agendadas.");
+          } else if (receiverMeetings >= 2) {
+            alert("El receptor ya tiene el máximo de reuniones agendadas.");
+          } else {
+            alert("No hay horarios disponibles para agendar esta reunión.");
+          }
           return;
         }
 
-        // 6. Asignar el slot encontrado a la reunión
+        // 6. Validar si alguno de los dos ya tiene reunión en el horario seleccionado
+        const conflictingMeeting = acceptedMeetingsSnapshot.docs.find(
+          (doc) =>
+            doc.data().timeSlot ===
+            `${selectedSlot.startTime} - ${selectedSlot.endTime}`
+        );
+
+        if (conflictingMeeting) {
+          alert(
+            "No puedes aceptar esta reunión porque ya tienes una en el mismo horario."
+          );
+          return;
+        }
+
+        // 7. Asignar el slot encontrado a la reunión
         await updateDoc(meetingDocRef, {
           status: "accepted",
           tableAssigned: selectedSlot.tableNumber.toString(),
           timeSlot: `${selectedSlot.startTime} - ${selectedSlot.endTime}`,
         });
 
-        // 7. Marcar el slot en la agenda como ocupado
+        // 8. Marcar el slot en la agenda como ocupado
         const agendaDocRef = doc(db, "agenda", selectedSlotDoc.id);
         await updateDoc(agendaDocRef, {
           available: false,
           meetingId,
         });
 
-        // 8. Crear una notificación de éxito para el solicitante
+        // 9. Crear una notificación para el solicitante
         await addDoc(collection(db, "notifications"), {
           userId: requesterId,
           title: "Reunión aceptada",
-          message: `Tu solicitud de reunión fue aceptada. Se agendó en la Mesa ${selectedSlot.tableNumber} a las ${selectedSlot.startTime}.`,
-          type: "success",
+          message: `Tu solicitud de reunión fue aceptada.`,
           timestamp: new Date(),
           read: false,
         });
 
         showNotification({
           title: "Reunión aceptada",
-          message: `Se agendó en la Mesa ${selectedSlot.tableNumber} a las ${selectedSlot.startTime}.`,
+          message: "Has aceptado la reunión exitosamente.",
           color: "green",
           position: "top-right",
         });
       } else {
-        // 9. Si se rechaza, actualizar el estado
+        // Si se rechaza, simplemente actualizar el estado
         await updateDoc(meetingDocRef, { status: newStatus });
 
-        // 10. Enviar notificación al usuario solicitante
+        // Enviar notificación al usuario solicitante
         await addDoc(collection(db, "notifications"), {
           userId: requesterId,
           title: "Reunión rechazada",
           message: `Tu solicitud de reunión fue rechazada.`,
-          type: "error",
           timestamp: new Date(),
           read: false,
         });
