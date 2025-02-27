@@ -49,6 +49,8 @@ const Dashboard = () => {
   const [rejectedRequests, setRejectedRequests] = useState([]);
   const [participantsInfo, setParticipantsInfo] = useState({});
   const [notifications, setNotifications] = useState([]);
+  const [solicitarReunionHabilitado, setSolicitarReunionHabilitado] =
+    useState(true);
 
   useEffect(() => {
     if (!uid) return;
@@ -90,6 +92,20 @@ const Dashboard = () => {
   useEffect(() => {
     if (!currentUser?.data) navigate("/");
   }, [currentUser, navigate]);
+
+  useEffect(() => {
+    const fetchGlobalSettings = async () => {
+      const configRef = doc(db, "config", "generalSettings");
+      const configSnap = await getDoc(configRef);
+      if (configSnap.exists()) {
+        setSolicitarReunionHabilitado(
+          configSnap.data().solicitarReunionHabilitado
+        );
+      }
+    };
+
+    fetchGlobalSettings();
+  }, []);
 
   // Cargar asistentes excluyendo al usuario actual
   useEffect(() => {
@@ -448,8 +464,11 @@ const Dashboard = () => {
                         mt="sm"
                         fullWidth
                         onClick={() => sendMeetingRequest(assistant.id)}
+                        disabled={!solicitarReunionHabilitado}
                       >
-                        Solicitar reunión
+                        {solicitarReunionHabilitado
+                          ? "Solicitar reunión"
+                          : "Solicitudes deshabilitadas"}
                       </Button>
                     </Card>
                   </Grid.Col>
