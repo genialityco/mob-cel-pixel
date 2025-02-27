@@ -25,6 +25,7 @@ import {
 import { db } from "../firebase/firebaseConfig";
 import { UserContext } from "../context/UserContext";
 import { useNavigate } from "react-router-dom";
+import { showNotification } from "@mantine/notifications";
 
 const Dashboard = () => {
   const { currentUser } = useContext(UserContext);
@@ -126,6 +127,13 @@ const Dashboard = () => {
         createdAt: new Date(),
         participants: [uid, assistantId],
       });
+
+      showNotification({
+        title: "Solicitud enviada",
+        message: "Tu solicitud de reunión ha sido enviada correctamente.",
+        color: "blue",
+        position: "top-right"
+      })
     } catch (error) {
       console.error("Error al enviar la solicitud de reunión:", error);
     }
@@ -209,7 +217,12 @@ const Dashboard = () => {
           meetingId,
         });
 
-        alert("Reunión aceptada y asignada correctamente.");
+        showNotification({
+          title: `Reunión ${newStatus === "accepted" ? "aceptada" : "rechazada"}`,
+          message: `Has ${newStatus === "accepted" ? "aceptado" : "rechazado"} la reunión.`,
+          color: newStatus === "accepted" ? "green" : "red",
+          position: "top-right"
+        });
       } else {
         // Si se rechaza, simplemente actualizar el estado
         await updateDoc(meetingDocRef, { status: newStatus });
