@@ -75,7 +75,7 @@ const MatrixPage = () => {
       const meetingsData = snapshot.docs.map((doc) => ({
         id: doc.id,
         ...doc.data(),
-        timeSlot: doc.data().timeSlot.match(/\d{2}:\d{2}/)[0], // Extraer solo la hora
+        timeSlot: doc.data().timeSlot.match(/\d{2}:\d{2}/)[0],
       }));
       setMeetings(meetingsData);
     });

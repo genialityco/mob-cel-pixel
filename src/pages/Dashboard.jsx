@@ -269,14 +269,16 @@ const Dashboard = () => {
           const requesterMeetings = acceptedMeetingsSnapshot.docs.filter(
             (doc) => doc.data().participants.includes(requesterId)
           ).length;
-          const receiverMeetings = acceptedMeetingsSnapshot.docs.filter(
-            (doc) => doc.data().participants.includes(receiverId)
+          const receiverMeetings = acceptedMeetingsSnapshot.docs.filter((doc) =>
+            doc.data().participants.includes(receiverId)
           ).length;
 
           if (requesterMeetings >= 2) {
-            alert("El solicitante ya tiene el máximo de reuniones agendadas.");
+            alert(
+              "La persona que solicitó la reunión ya tiene la agenda llena."
+            );
           } else if (receiverMeetings >= 2) {
-            alert("El receptor ya tiene el máximo de reuniones agendadas.");
+            alert("Ya tienes la agenda llena.");
           } else {
             alert("No hay horarios disponibles para agendar esta reunión.");
           }
@@ -499,6 +501,12 @@ const Dashboard = () => {
                             </Text>
                             <Text size="sm">Empresa: {requester.empresa}</Text>
                             <Text size="sm">Cargo: {requester.cargo}</Text>
+                            <Text size="sm">
+                              Correo: {requester.email || "No disponible"}
+                            </Text>
+                            <Text size="sm">
+                              Teléfono: {requester.phone || "No disponible"}
+                            </Text>
                           </>
                         ) : (
                           <Text>Cargando información del solicitante...</Text>
@@ -549,6 +557,12 @@ const Dashboard = () => {
                             <Text size="sm">Empresa: {requester.empresa}</Text>
                             <Text size="sm">Cargo: {requester.cargo}</Text>
                             <Text size="sm">
+                              Correo: {requester.email || "No disponible"}
+                            </Text>
+                            <Text size="sm">
+                              Teléfono: {requester.phone || "No disponible"}
+                            </Text>
+                            <Text size="sm">
                               <strong>Horario:</strong>{" "}
                               {request.timeSlot || "Por asignar"}
                             </Text>
@@ -587,6 +601,12 @@ const Dashboard = () => {
                             </Text>
                             <Text size="sm">Empresa: {requester.empresa}</Text>
                             <Text size="sm">Cargo: {requester.cargo}</Text>
+                            <Text size="sm">
+                              Correo: {requester.email || "No disponible"}
+                            </Text>
+                            <Text size="sm">
+                              Teléfono: {requester.phone || "No disponible"}
+                            </Text>
                             <Text size="sm" color="red">
                               Esta solicitud fue rechazada.
                             </Text>
