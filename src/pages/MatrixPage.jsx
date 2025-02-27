@@ -1,15 +1,18 @@
-import { useState, useEffect, useRef } from 'react';
-import { Container, Title, Paper, Text, Flex } from '@mantine/core';
-import { db } from '../firebase/firebaseConfig';
+import { useState, useEffect, useRef } from "react";
+import { Container, Title, Paper, Text, Flex } from "@mantine/core";
+import { db } from "../firebase/firebaseConfig";
 import {
   collection,
   doc,
+  getDoc,
   onSnapshot,
   query,
   where,
-} from 'firebase/firestore';
-import anime from 'animejs';
+  orderBy,
+} from "firebase/firestore";
+import anime from "animejs";
 
+// Función para generar los intervalos de horarios
 const generateTimeSlots = (start, end, duration) => {
   const slots = [];
   let currentTime = new Date(`1970-01-01T${start}:00`);
@@ -23,109 +26,140 @@ const generateTimeSlots = (start, end, duration) => {
   return slots;
 };
 
-const getRandomStatus = () => {
-  const statuses = ['filled', 'pending', 'available'];
-  return statuses[Math.floor(Math.random() * statuses.length)];
-};
-
-const getRandomParticipants = () => {
-  const names = ['Alice', 'Bob', 'Charlie', 'David', 'Eve'];
-  const shuffled = names.sort(() => 0.5 - Math.random());
-  return [shuffled[0], shuffled[1]];
-};
-
 const MatrixPage = () => {
   // Estados para la configuración
-  const [maxPersons, setMaxPersons] = useState(100);
-  const [numTables, setNumTables] = useState(50);
-  const meetingDuration = 10; // Cada cita dura 10 minutos (fijo)
-  const [startTime, setStartTime] = useState("09:00");
-  const [endTime, setEndTime] = useState("10:00");
-  // Campo para que el admin ingrese nombres o numeraciones de mesas (separados por comas)
-  const [tableNamesInput, setTableNamesInput] = useState("");
-  const [message, setMessage] = useState('');
-  const [matrix, setMatrix] = useState([]);
-  const [slots, setSlots] = useState([]);
+  const [config, setConfig] = useState(null);
+  const [agenda, setAgenda] = useState([]);
   const [meetings, setMeetings] = useState([]);
+  const [matrix, setMatrix] = useState([]);
   const tableRefs = useRef([]);
 
+  // Cargar Configuración de Firestore
   useEffect(() => {
+    const fetchConfig = async () => {
+      const configRef = doc(db, "config", "meetingConfig");
+      const configSnap = await getDoc(configRef);
+      if (configSnap.exists()) {
+        setConfig(configSnap.data());
+      }
+    };
 
-    //['09:00','09:10']
-    let slots = generateTimeSlots(startTime, endTime, meetingDuration);
-    setSlots(slots);
-    console.log('slots',slots)
+    fetchConfig();
+  }, []);
+
+  // Cargar la Agenda en Tiempo Real
+  useEffect(() => {
+    if (!config) return;
+
+    const q = query(collection(db, "agenda"), orderBy("startTime"));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const agendaData = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+      setAgenda(agendaData);
+    });
+
+    return () => unsubscribe();
+  }, [config]);
+
+  // Cargar las Reuniones en Tiempo Real
+  useEffect(() => {
+    if (!config) return;
 
     const q = query(
       collection(db, "meetings"),
-      where("status", "!=", "rejected") // Filtra donde status no sea "rejected"
+      where("status", "!=", "rejected")
     );
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const tmp_meetings = [];
-
-      snapshot.forEach((docItem) => {
-        let data  =  docItem.data();
-        data.timeSlotname = data?.timeSlot;
-        data.timeSlot = data?.timeSlot.match(/\d{2}:\d{2}/)[0];
-        tmp_meetings.push({ id: docItem.id, ...data });
-      });
-      console.log('tmp_meetings',tmp_meetings)
-      console.log('asignando el estado de meeetins de la base de datos')
-      setMeetings([...tmp_meetings]);
+      const meetingsData = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+        timeSlot: doc.data().timeSlot.match(/\d{2}:\d{2}/)[0], // Extraer solo la hora
+      }));
+      setMeetings(meetingsData);
     });
+
     return () => unsubscribe();
-  }, []);
+  }, [config]);
 
-
+  // Construcción de la Matriz con Datos Reales
   useEffect(() => {
-    console.log('asignado datos reales',meetings)
+    if (!config || agenda.length === 0) return;
 
-    //Agregar datos ficticios
+    const { numTables, meetingDuration, startTime, endTime } = config;
     const timeSlots = generateTimeSlots(startTime, endTime, meetingDuration);
-    const newMatrix = Array(numTables).fill().map(() => 
-      Array(timeSlots.length).fill().map(() => {
-        const status = getRandomStatus();
-        return {
-          status: status,
-          participants: status !== 'available' ? getRandomParticipants() : []
-        };
-      })
+
+    // Crear una matriz vacía basada en las mesas y los horarios
+    const newMatrix = Array.from({ length: numTables }, () =>
+      Array(timeSlots.length)
+        .fill()
+        .map(() => ({
+          status: "available",
+          participants: [],
+        }))
     );
 
-  
-    //Asignar reuniones  reales 
-    meetings.map((meeting)=>{
-      const timeSlotIndex =  slots.indexOf(meeting.timeSlot); 
-      const tableIndex = Number(meeting.tableAssigned)-1;
-      console.log('matrix  valor previo',tableIndex,timeSlotIndex, newMatrix[tableIndex][timeSlotIndex])
-      newMatrix[tableIndex][timeSlotIndex] = meeting
-      console.log('matrix  valor nuevo',tableIndex,timeSlotIndex, newMatrix[tableIndex][timeSlotIndex])
-    })
+    // Mapear la agenda en la matriz
+    agenda.forEach((slot) => {
+      const tableIndex = slot.tableNumber - 1;
+      const timeSlotIndex = timeSlots.indexOf(slot.startTime);
+
+      if (tableIndex >= 0 && timeSlotIndex >= 0) {
+        newMatrix[tableIndex][timeSlotIndex] = {
+          status: slot.available ? "available" : "occupied",
+          participants: [],
+        };
+      }
+    });
+
+    // Mapear las reuniones en la matriz
+    meetings.forEach((meeting) => {
+      const tableIndex = Number(meeting.tableAssigned) - 1;
+      const timeSlotIndex = timeSlots.indexOf(meeting.timeSlot);
+
+      if (tableIndex >= 0 && timeSlotIndex >= 0) {
+        newMatrix[tableIndex][timeSlotIndex] = {
+          status: meeting.status,
+          participants: meeting.participants || [],
+        };
+      }
+    });
 
     setMatrix(newMatrix);
-  }, [startTime, endTime, meetingDuration, numTables,meetings]);
+  }, [config, agenda, meetings]);
 
+  // Animación de colores con Anime.js
   useEffect(() => {
     tableRefs.current.forEach((ref, index) => {
       if (ref) {
         anime({
           targets: ref,
-          backgroundColor: getColor(matrix[Math.floor(index / slots.length)][index % slots.length].status),
+          backgroundColor: getColor(
+            matrix[Math.floor(index / matrix[0].length)][
+              index % matrix[0].length
+            ].status
+          ),
           duration: 500,
-          easing: 'easeInOutQuad'
+          easing: "easeInOutQuad",
         });
       }
     });
   }, [matrix]);
 
+  // Función para asignar colores según el estado
   const getColor = (status) => {
     switch (status) {
-      case 'filled':
-        return 'green';
-      case 'pending':
-        return 'orange';
+      case "available":
+        return "gray";
+      case "occupied":
+        return "blue";
+      case "pending":
+        return "orange";
+      case "accepted":
+        return "green";
       default:
-        return 'gray';
+        return "gray";
     }
   };
 
@@ -134,7 +168,7 @@ const MatrixPage = () => {
       <Title order={2} mt="md" mb="md">
         Matriz rueda de negocios
       </Title>
-      <Paper shadow="sm" p="xl" style={{ margin: '0 auto' }}>
+      <Paper shadow="sm" p="xl" style={{ margin: "0 auto" }}>
         <Flex
           mih={50}
           bg="rgba(0, 0, 0, .3)"
@@ -145,20 +179,41 @@ const MatrixPage = () => {
           wrap="wrap"
         >
           {matrix.map((table, tableIndex) => (
-            <div key={`table-${tableIndex}`} style={{ padding: '10px', margin: '5px', border: '1px solid black' }}>
-              <Text>{`Table ${tableIndex + 1}`}</Text>
+            <div
+              key={`table-${tableIndex}`}
+              style={{
+                padding: "10px",
+                margin: "5px",
+                border: "1px solid black",
+              }}
+            >
+              <Text>{`Mesa ${tableIndex + 1}`}</Text>
               <table>
                 <tbody>
                   {table.map((slot, slotIndex) => (
                     <tr
                       key={`${tableIndex}-${slotIndex}`}
-                      ref={(el) => (tableRefs.current[tableIndex * slots.length + slotIndex] = el)}
+                      ref={(el) =>
+                        (tableRefs.current[
+                          tableIndex * matrix[0].length + slotIndex
+                        ] = el)
+                      }
                     >
-                      <td>{slots[slotIndex]}</td>
-                      <td style={{backgroundColor:getColor(slot.status)}}> 
-                        {slot.status === 'available' 
-                          ? 'Available' 
-                          : `${slot.participants[0]} & ${slot.participants[1]} (${slot.status})`}
+                      <td>
+                        {
+                          generateTimeSlots(
+                            config.startTime,
+                            config.endTime,
+                            config.meetingDuration
+                          )[slotIndex]
+                        }
+                      </td>
+                      <td style={{ backgroundColor: getColor(slot.status) }}>
+                        {slot.status === "available"
+                          ? "Disponible"
+                          : `${slot.participants[0] || ""} & ${
+                              slot.participants[1] || ""
+                            } (${slot.status})`}
                       </td>
                     </tr>
                   ))}

@@ -9,7 +9,9 @@ import {
   where,
   getDocs,
 } from "firebase/firestore";
-import { auth, db } from "../firebase/firebaseConfig";
+import { auth, db, messaging } from "../firebase/firebaseConfig";
+import { getToken, onMessage } from "firebase/messaging";
+import { showNotification } from "@mantine/notifications";
 
 export const UserContext = createContext();
 
@@ -37,6 +39,26 @@ export const UserProvider = ({ children }) => {
         const newUser = { uid, data: userData };
         setCurrentUser(newUser);
         sessionStorage.setItem("currentUser", JSON.stringify(newUser));
+
+        // Solicitar permiso de notificaciones
+        try {
+          const token = await getToken(messaging, {
+            vapidKey: import.meta.env.VITE_FIREBASE_VAPID_KEY,
+          });
+
+          if (token) {
+            console.log("Token FCM:", token);
+            await setDoc(
+              doc(db, "users", uid),
+              { fcmToken: token },
+              { merge: true }
+            );
+          } else {
+            console.log("No se obtuvo token de FCM.");
+          }
+        } catch (error) {
+          console.error("Error al obtener el token de notificación:", error);
+        }
       } else {
         try {
           const userCredential = await signInAnonymously(auth);
@@ -52,6 +74,18 @@ export const UserProvider = ({ children }) => {
 
     return () => unsubscribe();
   }, [manualLogin]);
+
+  useEffect(() => {
+    // Escuchar mensajes en primer plano
+    onMessage(messaging, (payload) => {
+      console.log("Notificación recibida:", payload);
+      showNotification({
+        title: payload.notification.title,
+        message: payload.notification.body,
+        color: "blue",
+      });
+    });
+  }, []);
 
   const updateUser = async (uid, data) => {
     try {

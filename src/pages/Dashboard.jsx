@@ -9,6 +9,10 @@ import {
   Button,
   Stack,
   Group,
+  Menu,
+  Indicator,
+  ActionIcon,
+  Flex,
 } from "@mantine/core";
 import {
   collection,
@@ -26,6 +30,7 @@ import { db } from "../firebase/firebaseConfig";
 import { UserContext } from "../context/UserContext";
 import { useNavigate } from "react-router-dom";
 import { showNotification } from "@mantine/notifications";
+import { IoNotificationsOutline } from "react-icons/io5";
 
 const Dashboard = () => {
   const { currentUser } = useContext(UserContext);
@@ -39,6 +44,44 @@ const Dashboard = () => {
   const [acceptedRequests, setAcceptedRequests] = useState([]);
   const [rejectedRequests, setRejectedRequests] = useState([]);
   const [participantsInfo, setParticipantsInfo] = useState({});
+  const [notifications, setNotifications] = useState([]);
+
+  useEffect(() => {
+    if (!uid) return;
+
+    // Escuchar notificaciones en tiempo real para este usuario
+    const q = query(
+      collection(db, "notifications"),
+      where("userId", "==", uid),
+      orderBy("timestamp", "desc")
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const newNotifications = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+
+      // Mostrar notificación en el frontend
+      newNotifications.forEach((notif) => {
+        if (!notif.read) {
+          showNotification({
+            title: notif.title,
+            message: notif.message,
+            color: "teal",
+            position: "top-right",
+          });
+
+          // Marcar la notificación como leída en Firestore
+          updateDoc(doc(db, "notifications", notif.id), { read: true });
+        }
+      });
+
+      setNotifications(newNotifications);
+    });
+
+    return () => unsubscribe();
+  }, [uid]);
 
   useEffect(() => {
     if (!currentUser?.data) navigate("/");
@@ -128,12 +171,20 @@ const Dashboard = () => {
         participants: [uid, assistantId],
       });
 
+      await addDoc(collection(db, "notifications"), {
+        userId: assistantId,
+        title: "Nueva solicitud de reunión",
+        message: `${currentUser.data.nombre} te ha enviado una solicitud de reunión.`,
+        timestamp: new Date(),
+        read: false,
+      });
+
       showNotification({
         title: "Solicitud enviada",
         message: "Tu solicitud de reunión ha sido enviada correctamente.",
         color: "blue",
-        position: "top-right"
-      })
+        position: "top-right",
+      });
     } catch (error) {
       console.error("Error al enviar la solicitud de reunión:", error);
     }
@@ -217,11 +268,26 @@ const Dashboard = () => {
           meetingId,
         });
 
+        await addDoc(collection(db, "notifications"), {
+          userId: meetingData.requesterId,
+          title:
+            newStatus === "accepted" ? "Reunión aceptada" : "Reunión rechazada",
+          message: `Tu solicitud de reunión fue ${
+            newStatus === "accepted" ? "aceptada" : "rechazada"
+          }.`,
+          timestamp: new Date(),
+          read: false,
+        });
+
         showNotification({
-          title: `Reunión ${newStatus === "accepted" ? "aceptada" : "rechazada"}`,
-          message: `Has ${newStatus === "accepted" ? "aceptado" : "rechazado"} la reunión.`,
+          title: `Reunión ${
+            newStatus === "accepted" ? "aceptada" : "rechazada"
+          }`,
+          message: `Has ${
+            newStatus === "accepted" ? "aceptado" : "rechazado"
+          } la reunión.`,
           color: newStatus === "accepted" ? "green" : "red",
-          position: "top-right"
+          position: "top-right",
         });
       } else {
         // Si se rechaza, simplemente actualizar el estado
@@ -234,14 +300,50 @@ const Dashboard = () => {
 
   return (
     <Container>
-      <Title order={2} mb="md">
-        Dashboard
-      </Title>
+      <Flex gap="md">
+        <Title order={2} mb="md">
+          Dashboard
+        </Title>
+        <Menu position="bottom-start" width={300}>
+          <Menu.Target>
+            <Indicator label={notifications.length} size={18} color="red">
+              <ActionIcon variant="light">
+                <IoNotificationsOutline size={24} />
+              </ActionIcon>
+            </Indicator>
+          </Menu.Target>
+
+          <Menu.Dropdown>
+            {notifications.length > 0 ? (
+              notifications.map((notif) => (
+                <Menu.Item key={notif.id}>
+                  <strong>{notif.title}</strong>
+                  <Text size="sm">{notif.message}</Text>
+                </Menu.Item>
+              ))
+            ) : (
+              <Text align="center" size="sm" color="dimmed">
+                No tienes notificaciones
+              </Text>
+            )}
+          </Menu.Dropdown>
+        </Menu>
+      </Flex>
       <Tabs defaultValue="asistentes">
         <Tabs.List>
-          <Tabs.Tab value="asistentes">Asistentes</Tabs.Tab>
-          <Tabs.Tab value="reuniones">Reuniones</Tabs.Tab>
-          <Tabs.Tab value="solicitudes">Solicitudes</Tabs.Tab>
+          <Tabs.Tab value="asistentes">
+            Asistentes ({assistants.length})
+          </Tabs.Tab>
+          <Tabs.Tab value="reuniones">
+            Reuniones ({acceptedMeetings.length})
+          </Tabs.Tab>
+          <Tabs.Tab value="solicitudes">
+            Solicitudes (
+            {pendingRequests.length +
+              acceptedRequests.length +
+              rejectedRequests.length}
+            )
+          </Tabs.Tab>
         </Tabs.List>
 
         {/* TAB ASISTENTES */}
@@ -308,9 +410,15 @@ const Dashboard = () => {
         <Tabs.Panel value="solicitudes" pt="md">
           <Tabs defaultValue="pendientes">
             <Tabs.List>
-              <Tabs.Tab value="pendientes">Pendientes</Tabs.Tab>
-              <Tabs.Tab value="aceptadas">Aceptadas</Tabs.Tab>
-              <Tabs.Tab value="rechazadas">Rechazadas</Tabs.Tab>
+              <Tabs.Tab value="pendientes">
+                Pendientes ({pendingRequests.length})
+              </Tabs.Tab>
+              <Tabs.Tab value="aceptadas">
+                Aceptadas ({acceptedRequests.length})
+              </Tabs.Tab>
+              <Tabs.Tab value="rechazadas">
+                Rechazadas ({rejectedRequests.length})
+              </Tabs.Tab>
             </Tabs.List>
 
             {/* TAB DE SOLICITUDES PENDIENTES */}
