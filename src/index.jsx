@@ -28,15 +28,15 @@ const theme = createTheme({
 
 createRoot(document.getElementById("root")).render(
   // <StrictMode>
-   <UserProvider>
-  <BrowserRouter>
-    <MantineProvider theme={theme}>
-      <ModalsProvider>
-        <Notifications />
-        <App />
-      </ModalsProvider>
-    </MantineProvider>
-  </BrowserRouter>
+  <UserProvider>
+    <BrowserRouter>
+      <MantineProvider theme={theme}>
+        <ModalsProvider>
+          <Notifications />
+          <App />
+        </ModalsProvider>
+      </MantineProvider>
+    </BrowserRouter>
   </UserProvider>
   // </StrictMode>
 );

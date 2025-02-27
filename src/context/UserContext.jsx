@@ -1,6 +1,14 @@
 import { createContext, useState, useEffect } from "react";
-import { onAuthStateChanged, signInAnonymously } from "firebase/auth";
-import { getDoc, doc, setDoc } from "firebase/firestore";
+import { onAuthStateChanged, signInAnonymously, signOut } from "firebase/auth";
+import {
+  getDoc,
+  doc,
+  setDoc,
+  query,
+  collection,
+  where,
+  getDocs,
+} from "firebase/firestore";
 import { auth, db } from "../firebase/firebaseConfig";
 
 export const UserContext = createContext();
@@ -14,11 +22,10 @@ export const UserProvider = ({ children }) => {
       if (user) {
         const uid = user.uid;
         const userDoc = await getDoc(doc(db, "users", uid));
-        user.data = null;
-        if (userDoc.exists()) {
-          user.data = userDoc.data();
-        }
-        setCurrentUser(user);
+
+        const userData = userDoc.exists() ? userDoc.data() : null;
+
+        setCurrentUser({ ...user, data: userData });
       } else {
         try {
           const userCredential = await signInAnonymously(auth);
@@ -35,7 +42,7 @@ export const UserProvider = ({ children }) => {
 
   const updateUser = async (uid, data) => {
     try {
-      await setDoc(doc(db, "users", uid), data);
+      await setDoc(doc(db, "users", uid), data, { merge: true });
       setCurrentUser((prevUser) => ({
         ...prevUser,
         data: { ...prevUser.data, ...data },
@@ -45,12 +52,47 @@ export const UserProvider = ({ children }) => {
     }
   };
 
+  const logout = async () => {
+    try {
+      await signOut(auth);
+      setCurrentUser(null);
+    } catch (error) {
+      console.error("Error signing out:", error);
+    }
+  };
+
+  const loginByCedula = async (cedula) => {
+    try {
+      const q = query(collection(db, "users"), where("cedula", "==", cedula));
+      const querySnapshot = await getDocs(q);
+
+      if (querySnapshot.empty) {
+        return { error: "No se encontró ningún usuario con esa cédula." };
+      }
+
+      const userDoc = querySnapshot.docs[0];
+      const userData = userDoc.data();
+
+      // Simular inicio de sesión con este usuario (no Firebase Auth, solo en el contexto)
+      setCurrentUser({ uid: userDoc.id, data: userData });
+
+      return { success: true };
+    } catch (error) {
+      console.error("Error al buscar usuario:", error);
+      return { error: "Error al buscar usuario. Intente nuevamente." };
+    }
+  };
+
   return (
-    <UserContext.Provider value={{ 
-      currentUser, 
-      userLoading, 
-      updateUser 
-    }}>
+    <UserContext.Provider
+      value={{
+        currentUser,
+        userLoading,
+        updateUser,
+        logout,
+        loginByCedula,
+      }}
+    >
       {children}
     </UserContext.Provider>
   );
