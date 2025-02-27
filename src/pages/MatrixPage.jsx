@@ -1,7 +1,14 @@
-import { useState, useEffect } from 'react';
-import { Container, Title, Card, Paper, Badge, Stack, NumberInput, TextInput, Button, Group, Text,Flex } from '@mantine/core';
-import { doc, setDoc, addDoc, collection } from 'firebase/firestore';
+import { useState, useEffect, useRef } from 'react';
+import { Container, Title, Paper, Text, Flex } from '@mantine/core';
 import { db } from '../firebase/firebaseConfig';
+import {
+  collection,
+  doc,
+  onSnapshot,
+  query,
+  where,
+} from 'firebase/firestore';
+import anime from 'animejs';
 
 const generateTimeSlots = (start, end, duration) => {
   const slots = [];
@@ -38,24 +45,81 @@ const MatrixPage = () => {
   const [tableNamesInput, setTableNamesInput] = useState("");
   const [message, setMessage] = useState('');
   const [matrix, setMatrix] = useState([]);
+  const [slots, setSlots] = useState([]);
+  const [meetings, setMeetings] = useState([]);
+  const tableRefs = useRef([]);
 
   useEffect(() => {
+
+    //['09:00','09:10']
+    let slots = generateTimeSlots(startTime, endTime, meetingDuration);
+    setSlots(slots);
+    console.log('slots',slots)
+
+    const q = query(
+      collection(db, "meetings"),
+      where("status", "!=", "rejected") // Filtra donde status no sea "rejected"
+    );
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const tmp_meetings = [];
+
+      snapshot.forEach((docItem) => {
+        let data  =  docItem.data();
+        data.timeSlotname = data?.timeSlot;
+        data.timeSlot = data?.timeSlot.match(/\d{2}:\d{2}/)[0];
+        tmp_meetings.push({ id: docItem.id, ...data });
+      });
+      console.log('tmp_meetings',tmp_meetings)
+      console.log('asignando el estado de meeetins de la base de datos')
+      setMeetings([...tmp_meetings]);
+    });
+    return () => unsubscribe();
+  }, []);
+
+
+  useEffect(() => {
+    console.log('asignado datos reales',meetings)
+
+    //Agregar datos ficticios
     const timeSlots = generateTimeSlots(startTime, endTime, meetingDuration);
     const newMatrix = Array(numTables).fill().map(() => 
       Array(timeSlots.length).fill().map(() => {
         const status = getRandomStatus();
         return {
-          state: status,
+          status: status,
           participants: status !== 'available' ? getRandomParticipants() : []
         };
       })
     );
 
-    setMatrix(newMatrix);
-  }, [startTime, endTime, meetingDuration, numTables]);
+  
+    //Asignar reuniones  reales 
+    meetings.map((meeting)=>{
+      const timeSlotIndex =  slots.indexOf(meeting.timeSlot); 
+      const tableIndex = Number(meeting.tableAssigned)-1;
+      console.log('matrix  valor previo',tableIndex,timeSlotIndex, newMatrix[tableIndex][timeSlotIndex])
+      newMatrix[tableIndex][timeSlotIndex] = meeting
+      console.log('matrix  valor nuevo',tableIndex,timeSlotIndex, newMatrix[tableIndex][timeSlotIndex])
+    })
 
-  const getColor = (state) => {
-    switch (state) {
+    setMatrix(newMatrix);
+  }, [startTime, endTime, meetingDuration, numTables,meetings]);
+
+  useEffect(() => {
+    tableRefs.current.forEach((ref, index) => {
+      if (ref) {
+        anime({
+          targets: ref,
+          backgroundColor: getColor(matrix[Math.floor(index / slots.length)][index % slots.length].status),
+          duration: 500,
+          easing: 'easeInOutQuad'
+        });
+      }
+    });
+  }, [matrix]);
+
+  const getColor = (status) => {
+    switch (status) {
       case 'filled':
         return 'green';
       case 'pending':
@@ -86,12 +150,15 @@ const MatrixPage = () => {
               <table>
                 <tbody>
                   {table.map((slot, slotIndex) => (
-                    <tr key={`${tableIndex}-${slotIndex}`} style={{ backgroundColor: getColor(slot.state) }}>
-                      <td>{generateTimeSlots(startTime, endTime, meetingDuration)[slotIndex]}</td>
-                      <td>
-                        {slot.state === 'available' 
+                    <tr
+                      key={`${tableIndex}-${slotIndex}`}
+                      ref={(el) => (tableRefs.current[tableIndex * slots.length + slotIndex] = el)}
+                    >
+                      <td>{slots[slotIndex]}</td>
+                      <td style={{backgroundColor:getColor(slot.status)}}> 
+                        {slot.status === 'available' 
                           ? 'Available' 
-                          : `${slot.participants[0]} & ${slot.participants[1]} (${slot.state})`}
+                          : `${slot.participants[0]} & ${slot.participants[1]} (${slot.status})`}
                       </td>
                     </tr>
                   ))}
