@@ -9,6 +9,7 @@ import {
   Button,
   Group,
   Text,
+  Select,
 } from "@mantine/core";
 import {
   doc,
@@ -38,6 +39,8 @@ const AdminPanel = () => {
   const [selectedTimeSlot, setSelectedTimeSlot] = useState("");
   const [participant1, setParticipant1] = useState("");
   const [participant2, setParticipant2] = useState("");
+  const [assistants, setAssistants] = useState([]);
+  const [timeSlots, setTimeSlots] = useState([]);
 
   useEffect(() => {
     const fetchConfig = async () => {
@@ -51,7 +54,13 @@ const AdminPanel = () => {
           setBreakTime(data.breakTime);
           setStartTime(data.startTime);
           setEndTime(data.endTime);
-          setTableNamesInput(data.tableNames.join(", ")); // Convertimos el array en string
+          setTableNamesInput(data.tableNames.join(", "));
+          generateTimeSlots(
+            data.startTime,
+            data.endTime,
+            data.meetingDuration,
+            data.breakTime
+          );
         }
       } catch (error) {
         console.error("Error al cargar configuración:", error);
@@ -59,7 +68,38 @@ const AdminPanel = () => {
     };
 
     fetchConfig();
+    fetchAssistants();
   }, []);
+
+  // Obtener asistentes desde Firestore
+  const fetchAssistants = async () => {
+    try {
+      const usersSnapshot = await getDocs(collection(db, "users"));
+      const usersList = usersSnapshot.docs.map((doc) => ({
+        value: doc.id,
+        label: doc.data().nombre + " - " + doc.data().empresa,
+      }));
+      setAssistants(usersList);
+    } catch (error) {
+      console.error("Error al obtener asistentes:", error);
+    }
+  };
+
+  // Generar horarios disponibles
+  const generateTimeSlots = (start, end, duration, breakTime) => {
+    const slots = [];
+    let currentTime = new Date(`1970-01-01T${start}:00`);
+    const endTime = new Date(`1970-01-01T${end}:00`);
+
+    while (currentTime < endTime) {
+      let formattedTime = currentTime.toTimeString().substring(0, 5);
+      slots.push({ value: formattedTime, label: formattedTime });
+
+      currentTime.setMinutes(currentTime.getMinutes() + duration + breakTime);
+    }
+
+    setTimeSlots(slots);
+  };
 
   // Guardar configuración en Firestore
   const saveConfig = async () => {
@@ -193,6 +233,11 @@ const AdminPanel = () => {
         return;
       }
 
+      if (participant1 === participant2) {
+        setMessage("No puedes seleccionar el mismo usuario dos veces.");
+        return;
+      }
+
       const meetingData = {
         tableAssigned: selectedTable,
         timeSlot: selectedTimeSlot,
@@ -273,26 +318,40 @@ const AdminPanel = () => {
         <Title order={3} mt="xl">
           Asignar Reunión Manualmente
         </Title>
+        <Title order={3} mt="xl">
+          Asignar Reunión Manualmente
+        </Title>
         <Stack>
-          <TextInput
+          <Select
             label="Número de Mesa"
+            data={Array.from({ length: numTables }, (_, i) => ({
+              value: (i + 1).toString(),
+              label: `Mesa ${i + 1}`,
+            }))}
             value={selectedTable}
-            onChange={(e) => setSelectedTable(e.target.value)}
+            onChange={setSelectedTable}
+            searchable
           />
-          <TextInput
+          <Select
             label="Horario"
+            data={timeSlots}
             value={selectedTimeSlot}
-            onChange={(e) => setSelectedTimeSlot(e.target.value)}
+            onChange={setSelectedTimeSlot}
+            searchable
           />
-          <TextInput
+          <Select
             label="Participante 1"
+            data={assistants}
             value={participant1}
-            onChange={(e) => setParticipant1(e.target.value)}
+            onChange={setParticipant1}
+            searchable
           />
-          <TextInput
+          <Select
             label="Participante 2"
+            data={assistants}
             value={participant2}
-            onChange={(e) => setParticipant2(e.target.value)}
+            onChange={setParticipant2}
+            searchable
           />
           <Button onClick={assignMeetingManually} color="green">
             Asignar Reunión
