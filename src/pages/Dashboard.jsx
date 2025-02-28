@@ -441,11 +441,11 @@ const Dashboard = () => {
                       </Text>
                       <Text size="sm">
                         📧 <strong>Correo:</strong>{" "}
-                        {assistant.correo || "No disponible"}
+                        {assistant.contacto.correo || "No disponible"}
                       </Text>
                       <Text size="sm">
                         📞 <strong>Teléfono:</strong>{" "}
-                        {assistant.telefono || "No disponible"}
+                        {assistant.contacto.telefono || "No disponible"}
                       </Text>
                       <Text size="sm">
                         📝 <strong>Descripción:</strong>{" "}
@@ -552,11 +552,11 @@ const Dashboard = () => {
                             </Text>
                             <Text size="sm">
                               📧 <strong>Correo:</strong>{" "}
-                              {requester.correo || "No disponible"}
+                              {requester.contacto.correo || "No disponible"}
                             </Text>
                             <Text size="sm">
                               📞 <strong>Teléfono:</strong>{" "}
-                              {requester.telefono || "No disponible"}
+                              {requester.contacto.telefono || "No disponible"}
                             </Text>
                             <Text size="sm">
                               🆔 <strong>Cédula:</strong>{" "}
@@ -628,11 +628,11 @@ const Dashboard = () => {
                             </Text>
                             <Text size="sm">
                               📧 <strong>Correo:</strong>{" "}
-                              {requester.correo || "No disponible"}
+                              {requester.contacto.correo || "No disponible"}
                             </Text>
                             <Text size="sm">
                               📞 <strong>Teléfono:</strong>{" "}
-                              {requester.telefono || "No disponible"}
+                              {requester.contacto.telefono || "No disponible"}
                             </Text>
                             <Text size="sm">
                               🆔 <strong>Cédula:</strong>{" "}
@@ -694,11 +694,11 @@ const Dashboard = () => {
                             </Text>
                             <Text size="sm">
                               📧 <strong>Correo:</strong>{" "}
-                              {requester.correo || "No disponible"}
+                              {requester.contacto.correo || "No disponible"}
                             </Text>
                             <Text size="sm">
                               📞 <strong>Teléfono:</strong>{" "}
-                              {requester.telefono || "No disponible"}
+                              {requester.contacto.telefono || "No disponible"}
                             </Text>
                             <Text size="sm">
                               🆔 <strong>Cédula:</strong>{" "}
