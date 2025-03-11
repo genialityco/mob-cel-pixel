@@ -45,6 +45,7 @@ const Dashboard = () => {
   const [filteredAssistants, setFilteredAssistants] = useState([]);
   const [acceptedMeetings, setAcceptedMeetings] = useState([]);
   const [pendingRequests, setPendingRequests] = useState([]);
+  const [sentRequests, setSentRequests] = useState([]);
   const [acceptedRequests, setAcceptedRequests] = useState([]);
   const [rejectedRequests, setRejectedRequests] = useState([]);
   const [participantsInfo, setParticipantsInfo] = useState({});
@@ -84,6 +85,25 @@ const Dashboard = () => {
       });
 
       setNotifications(newNotifications);
+    });
+
+    return () => unsubscribe();
+  }, [uid]);
+
+  useEffect(() => {
+    if (!uid) return;
+
+    const q = query(
+      collection(db, "meetings"),
+      where("requesterId", "==", uid),
+      where("status", "==", "pending")
+    );
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const sent = [];
+      snapshot.forEach((docItem) => {
+        sent.push({ id: docItem.id, ...docItem.data() });
+      });
+      setSentRequests(sent);
     });
 
     return () => unsubscribe();
@@ -527,6 +547,9 @@ const Dashboard = () => {
               <Tabs.Tab value="rechazadas">
                 Rechazadas ({rejectedRequests.length})
               </Tabs.Tab>
+              <Tabs.Tab value="enviadas">
+                Enviadas ({sentRequests.length})
+              </Tabs.Tab>
             </Tabs.List>
 
             {/* TAB DE SOLICITUDES PENDIENTES */}
@@ -728,6 +751,55 @@ const Dashboard = () => {
                   })
                 ) : (
                   <Text>No tienes solicitudes rechazadas.</Text>
+                )}
+              </Stack>
+            </Tabs.Panel>
+
+            {/* TAB DE SOLICITUDES ENVIADAS */}
+            <Tabs.Panel value="enviadas" pt="md">
+              <Stack>
+                {sentRequests.length > 0 ? (
+                  sentRequests.map((request) => {
+                    // Aquí, el "otro usuario" es el receiverId
+                    const receiver = assistants.find(
+                      (user) => user.id === request.receiverId
+                    );
+
+                    return (
+                      <Card key={request.id} shadow="sm" p="lg">
+                        {receiver ? (
+                          <>
+                            <Text>
+                              <strong>📛 Nombre:</strong> {receiver.nombre}
+                            </Text>
+                            <Text size="sm">
+                              🏢 <strong>Empresa:</strong> {receiver.empresa}
+                            </Text>
+                            <Text size="sm">
+                              🏷 <strong>Cargo:</strong> {receiver.cargo}
+                            </Text>
+                            <Text size="sm">
+                              📧 <strong>Correo:</strong>{" "}
+                              {receiver.contacto?.correo || "No disponible"}
+                            </Text>
+                            <Text size="sm">
+                              📞 <strong>Teléfono:</strong>{" "}
+                              {receiver.contacto?.telefono || "No disponible"}
+                            </Text>
+                            {/* ... cualquier otro dato que quieras mostrar ... */}
+
+                            <Text size="sm" color="blue">
+                              <strong>Estado:</strong> Pendiente
+                            </Text>
+                          </>
+                        ) : (
+                          <Text>Cargando información del receptor...</Text>
+                        )}
+                      </Card>
+                    );
+                  })
+                ) : (
+                  <Text>No tienes solicitudes enviadas pendientes.</Text>
                 )}
               </Stack>
             </Tabs.Panel>
