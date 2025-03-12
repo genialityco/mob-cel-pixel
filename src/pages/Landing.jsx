@@ -6,6 +6,7 @@ import {
   Button,
   Stack,
   Paper,
+  Center,
 } from "@mantine/core";
 import {
   doc,
@@ -13,12 +14,8 @@ import {
   updateDoc,
   onSnapshot,
 } from "firebase/firestore";
-
-// Importa la instancia de Firestore de tu configuración
 import { db } from "../firebase/firebaseConfig";
-
-// Importamos QRCode de la librería qrcode.react
-import QRCode from "qrcode.react";
+import { QRCodeCanvas } from "qrcode.react";
 
 const Landing = () => {
   const [phone, setPhone] = useState("");
@@ -73,7 +70,7 @@ const Landing = () => {
     }
   };
 
-  // Opción de desconexión (si deseas añadirla):
+  // Opción de desconexión (opcional)
   const handleDisconnect = async () => {
     try {
       await updateDoc(doc(db, "users", phone), {
@@ -88,60 +85,69 @@ const Landing = () => {
   };
 
   return (
-    // Pintamos el fondo con el color asignado.
-    // Para un mejor estilo, ajusta spacing o añade minHeight.
     <div
       style={{
         backgroundColor: color,
         minHeight: "100vh",
-        padding: "1rem",
+        padding: "2rem",
+        position: "relative", // Para poder posicionar el watermark
       }}
     >
-      <Paper
-        shadow="md"
-        p="xl"
-        style={{ 
-          maxWidth: 400, 
-          margin: "2rem auto",
-        }}
-      >
-        {!connected ? (
-          <>
-            <Title order={3} align="center" mb="lg">
-              Conectar Usuario
-            </Title>
-            <Stack spacing="md">
-              <TextInput
-                label="Teléfono"
-                placeholder="Ingresa tu teléfono"
-                value={phone}
-                onChange={(e) => setPhone(e.currentTarget.value)}
-              />
-              <Button onClick={handleConnect} disabled={!phone}>
-                Conectarme
-              </Button>
-            </Stack>
-          </>
-        ) : (
-          <>
-            <Title order={3} align="center" mb="md">
-              ¡Estás Conectado!
-            </Title>
-            <Stack spacing="sm" align="center">
-              <Text weight={600}>Teléfono: {phone}</Text>
-              <Text>Color actual: {color}</Text>
+      {/* 
+        Si el usuario está conectado, mostramos un gran texto en el fondo
+        (watermark) con el número de teléfono. Puedes personalizar tamaño,
+        color, opacidad, etc.
+      */}
 
-              {/* Código QR para identificar al usuario */}
-              <QRCode value={phone} size={128} />
+      {/* Contenido principal al frente */}
+      <Center style={{ height: "100%", zIndex: 1 }}>
+        <Paper
+          shadow="md"
+          p="xl"
+          style={{
+            maxWidth: 400,
+            width: "100%",
+            backgroundColor: color,
+          }}
+        >
+          {!connected ? (
+            <>
+              <Title order={3} align="center" mb="lg">
+                Conectar Usuario
+              </Title>
+              <Stack spacing="md">
+                <TextInput
+                  label="Teléfono"
+                  placeholder="Ingresa tu teléfono"
+                  value={phone}
+                  onChange={(e) => setPhone(e.currentTarget.value)}
+                />
+                <Button onClick={handleConnect} disabled={!phone}>
+                  Conectarme
+                </Button>
+              </Stack>
+            </>
+          ) : (
+            <>
+              <Title order={3} align="center" mb="md">
+                ¡Estás Conectado!
+              </Title>
+              <Stack spacing="sm" align="center">
+                <Text weight={600}>Teléfono: {phone}</Text>
+                <Text>Color actual: {color}</Text>
 
-              {/* Ejemplo de botón para desconectarse (opcional) */}
-              <Button variant="light" color="red" onClick={handleDisconnect}>
-                Desconectarme
-              </Button>
-            </Stack>
-          </>
-        )}
-      </Paper>
+                {/* Código QR para identificar al usuario */}
+                <QRCodeCanvas value={phone} size={128} />
+
+                {/* Ejemplo de botón para desconectarse (opcional) */}
+                <Button variant="light" color="red" onClick={handleDisconnect}>
+                  Desconectarme
+                </Button>
+              </Stack>
+            </>
+          )}
+        </Paper>
+      </Center>
     </div>
   );
 };
