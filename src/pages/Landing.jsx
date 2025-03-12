@@ -5,6 +5,7 @@ import {
   TextInput,
   Button,
   Stack,
+  Paper,
 } from "@mantine/core";
 import {
   doc,
@@ -12,7 +13,12 @@ import {
   updateDoc,
   onSnapshot,
 } from "firebase/firestore";
+
+// Importa la instancia de Firestore de tu configuración
 import { db } from "../firebase/firebaseConfig";
+
+// Importamos QRCode de la librería qrcode.react
+import QRCode from "qrcode.react";
 
 const Landing = () => {
   const [phone, setPhone] = useState("");
@@ -67,11 +73,23 @@ const Landing = () => {
     }
   };
 
+  // Opción de desconexión (si deseas añadirla):
+  const handleDisconnect = async () => {
+    try {
+      await updateDoc(doc(db, "users", phone), {
+        isConnected: false,
+      });
+      setConnected(false);
+      setPhone("");
+      setColor("#ffffff");
+    } catch (error) {
+      console.error("Error al desconectarse:", error);
+    }
+  };
+
   return (
-    /* 
-      Opción 1: Pintar el FONDO COMPLETO con el color asignado 
-      (puedes darle un minHeight para que sea visible aunque no haya mucho contenido).
-    */
+    // Pintamos el fondo con el color asignado.
+    // Para un mejor estilo, ajusta spacing o añade minHeight.
     <div
       style={{
         backgroundColor: color,
@@ -79,49 +97,51 @@ const Landing = () => {
         padding: "1rem",
       }}
     >
-      {/* 
-        Opción 2 (alternativa): 
-        Usar un Paper en el centro y pintarlo, 
-        dejando el fondo blanco o con otro color. 
-        Para ello, descomenta la línea de Paper y 
-        comenta la línea del <div> anterior.
-      */}
-
-      {/* 
       <Paper
         shadow="md"
         p="xl"
-        style={{ backgroundColor: color, minHeight: 400, margin: "2rem auto", maxWidth: 400 }}
-      > 
-      */}
-
-      <Stack spacing="md" align="center" style={{ maxWidth: 400, margin: "0 auto" }}>
-        <Title order={3} align="center">
-          Conectar Usuario
-        </Title>
-        <TextInput
-          label="Teléfono"
-          placeholder="Ingresa tu teléfono"
-          value={phone}
-          onChange={(e) => setPhone(e.currentTarget.value)}
-        />
-        <Button onClick={handleConnect} disabled={!phone}>
-          Conectarme
-        </Button>
-
-        {connected && (
+        style={{ 
+          maxWidth: 400, 
+          margin: "2rem auto",
+        }}
+      >
+        {!connected ? (
           <>
-            <Title order={5} align="center">
-              Estás Conectado
+            <Title order={3} align="center" mb="lg">
+              Conectar Usuario
             </Title>
-            <Text>Teléfono: {phone}</Text>
-            <Text>Color actual: {color}</Text>
+            <Stack spacing="md">
+              <TextInput
+                label="Teléfono"
+                placeholder="Ingresa tu teléfono"
+                value={phone}
+                onChange={(e) => setPhone(e.currentTarget.value)}
+              />
+              <Button onClick={handleConnect} disabled={!phone}>
+                Conectarme
+              </Button>
+            </Stack>
+          </>
+        ) : (
+          <>
+            <Title order={3} align="center" mb="md">
+              ¡Estás Conectado!
+            </Title>
+            <Stack spacing="sm" align="center">
+              <Text weight={600}>Teléfono: {phone}</Text>
+              <Text>Color actual: {color}</Text>
+
+              {/* Código QR para identificar al usuario */}
+              <QRCode value={phone} size={128} />
+
+              {/* Ejemplo de botón para desconectarse (opcional) */}
+              <Button variant="light" color="red" onClick={handleDisconnect}>
+                Desconectarme
+              </Button>
+            </Stack>
           </>
         )}
-      </Stack>
-
-      {/* Cerrar el Paper si eliges esa opción */}
-      {/* </Paper> */}
+      </Paper>
     </div>
   );
 };
